@@ -7,7 +7,7 @@ from database import create_tables, load_csv_data
 from queries import queries
 
 # ---------------- CONFIG ----------------
-st.set_page_config(page_title="Food Wastage System", layout="wide")
+st.set_page_config(page_title="Food Waste Management", layout="wide")
 
 DB_NAME = "food_waste.db"
 
@@ -22,10 +22,11 @@ def get_conn():
 
 
 # ---------------- SIDEBAR ----------------
-st.sidebar.title("🍴 Food Wastage Management")
+st.sidebar.title("🍲 Food Wastage System")
+
 menu = st.sidebar.radio(
-    "Select Option",
-    ["Dashboard", "Food Listings", "CRUD Operations", "15 SQL Query Results"]
+    "Navigation",
+    ["Dashboard", "Food Listings", "CRUD Operations", "SQL Query Results"]
 )
 
 # ======================================================
@@ -40,7 +41,7 @@ if menu == "Dashboard":
     total_claims = pd.read_sql("SELECT COUNT(*) AS Total FROM claims", conn)
     total_providers = pd.read_sql("SELECT COUNT(*) AS Total FROM providers", conn)
 
-    # ✅ Fix NaN values
+    # Fix NaN
     food_value = total_food["Total"][0]
     if pd.isna(food_value):
         food_value = 0
@@ -70,11 +71,8 @@ if menu == "Dashboard":
 
     if not city_df.empty:
         st.bar_chart(city_df.set_index("Location"))
-    else:
-        st.warning("No city data available!")
 
     conn.close()
-
 
 # ======================================================
 # 🍲 FOOD LISTINGS + FILTERS
@@ -87,6 +85,7 @@ elif menu == "Food Listings":
 
     if food_df.empty:
         st.warning("No food listings available!")
+
     else:
         st.sidebar.subheader("🔍 Filters")
 
@@ -118,7 +117,6 @@ elif menu == "Food Listings":
         st.dataframe(food_df)
 
     conn.close()
-
 
 # ======================================================
 # 🛠 CRUD OPERATIONS
@@ -155,4 +153,60 @@ elif menu == "CRUD Operations":
     # ---------------- UPDATE ----------------
     st.subheader("✏ Update Food Listing")
 
-    food_ids = pd.read_sql("SELECT Food_ID FROM food_listings", conn)["Food_ID"].tol_]()
+    food_ids = pd.read_sql(
+        "SELECT Food_ID FROM food_listings", conn
+    )["Food_ID"].tolist()
+
+    if food_ids:
+        selected_id = st.selectbox("Select Food ID", food_ids)
+
+        record = pd.read_sql(
+            f"SELECT * FROM food_listings WHERE Food_ID={selected_id}", conn
+        )
+
+        new_qty = st.number_input(
+            "New Quantity", value=int(record["Quantity"][0])
+        )
+        new_city = st.text_input(
+            "New City", value=record["Location"][0]
+        )
+
+        if st.button("Update Record"):
+            cursor.execute("""
+                UPDATE food_listings
+                SET Quantity=?, Location=?
+                WHERE Food_ID=?
+            """, (new_qty, new_city, selected_id))
+
+            conn.commit()
+            st.success("✅ Updated Successfully!")
+
+    else:
+        st.warning("No records available to update.")
+
+    # ---------------- DELETE ----------------
+    st.subheader("🗑 Delete Food Listing")
+
+    if food_ids:
+        delete_id = st.selectbox("Select Food ID to Delete", food_ids)
+
+        if st.button("Delete Record"):
+            cursor.execute("DELETE FROM food_listings WHERE Food_ID=?", (delete_id,))
+            conn.commit()
+            st.success("❌ Deleted Successfully!")
+
+    conn.close()
+
+# ======================================================
+# 📌 SQL QUERY RESULTS
+# ======================================================
+elif menu == "SQL Query Results":
+    st.title("📌 15 SQL Query Outputs")
+
+    selected_query = st.selectbox("Select Query", list(queries.keys()))
+
+    conn = get_conn()
+    df = pd.read_sql(queries[selected_query], conn)
+    conn.close()
+
+    st.dataframe(df)
