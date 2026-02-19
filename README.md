@@ -1,2 +1,18 @@
-# Food-Waste-Management-System
-A Food Waste Management System connects surplus food providers like restaurants and households with NGOs or individuals in need. Users can list available food, view locations, and claim items, ensuring edible food is distributed instead of wasted, helping reduce hunger and promote sustainability.
+# 🍲 Local Food Wastage Management System
+
+A Streamlit + SQL based platform to reduce food waste by connecting food providers with NGOs and receivers.
+
+## Features
+✅ SQL Database  
+✅ CRUD Operations  
+✅ 15 SQL Queries Output  
+✅ Streamlit Dashboard  
+✅ Food Filtering + Contact Support  
+
+## Run Project
+
+```bash
+pip install -r requirements.txt
+streamlit run str_app.py
+author
+Ashish Mehara (Ashu)
