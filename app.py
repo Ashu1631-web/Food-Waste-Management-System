@@ -4,13 +4,14 @@ import sqlite3
 import matplotlib.pyplot as plt
 
 from database import create_tables, load_csv_data
+from queries import queries
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Food Waste Management", layout="wide")
 
 DB_NAME = "food_waste.db"
 
-# Load Database Fresh
+# Reload Database
 create_tables()
 load_csv_data()
 
@@ -24,7 +25,7 @@ st.sidebar.title("🍲 Food Wastage System")
 
 menu = st.sidebar.radio(
     "Navigation",
-    ["Dashboard (15 Graphs)", "Food Listings", "Claims", "Providers"]
+    ["Dashboard (15 Graphs)", "Food Listings", "SQL Queries (15 Questions)"]
 )
 
 # ======================================================
@@ -43,100 +44,89 @@ if menu == "Dashboard (15 Graphs)":
 
     conn.close()
 
-    # ---------------- METRICS ----------------
+    # Metrics
     col1, col2, col3 = st.columns(3)
-
     col1.metric("🍱 Total Food Items", len(food_df))
     col2.metric("📌 Total Claims", len(claims_df))
     col3.metric("🏢 Total Providers", len(providers_df))
 
     st.divider()
-
-    # ======================================================
-    # 15 GRAPHS SECTION
-    # ======================================================
     st.subheader("📍 Food & Claims Insights (15 Charts)")
 
-    charts = st.container()
-
-    # Graph 1: Listings by City
+    # 1 Listings by City
     st.write("### 1. Food Listings by City")
-    city_count = food_df["Location"].value_counts()
-    st.bar_chart(city_count)
+    st.bar_chart(food_df["Location"].value_counts())
 
-    # Graph 2: Food Type Distribution
+    # 2 Food Type
     st.write("### 2. Food Type Distribution")
     st.bar_chart(food_df["Food_Type"].value_counts())
 
-    # Graph 3: Meal Type Distribution
+    # 3 Meal Type
     st.write("### 3. Meal Type Distribution")
     st.bar_chart(food_df["Meal_Type"].value_counts())
 
-    # Graph 4: Providers by City
+    # 4 Providers by City
     st.write("### 4. Providers by City")
     st.bar_chart(providers_df["City"].value_counts())
 
-    # Graph 5: Provider Type Contribution
+    # 5 Provider Type
     st.write("### 5. Provider Type Contribution")
     st.bar_chart(food_df["Provider_Type"].value_counts())
 
-    # Graph 6: Claims Status Breakdown
+    # 6 Claims Status
     st.write("### 6. Claims Status Breakdown")
     st.bar_chart(claims_df["Status"].value_counts())
 
-    # Graph 7: Quantity Distribution
-    st.write("### 7. Food Quantity Distribution")
+    # 7 Quantity Trend
+    st.write("### 7. Quantity Trend")
     st.line_chart(food_df["Quantity"])
 
-    # Graph 8: Top 10 Food Items Available
-    st.write("### 8. Top 10 Food Items Available")
-    top_food = food_df["Food_Name"].value_counts().head(10)
-    st.bar_chart(top_food)
+    # 8 Top Foods
+    st.write("### 8. Top 10 Food Items")
+    st.bar_chart(food_df["Food_Name"].value_counts().head(10))
 
-    # Graph 9: Top Cities by Claims
+    # 9 Claims by City
     st.write("### 9. Claims by City")
     merged = claims_df.merge(food_df, on="Food_ID")
     st.bar_chart(merged["Location"].value_counts())
 
-    # Graph 10: Expiry Trend
-    st.write("### 10. Food Expiry Dates Trend")
+    # 10 Expiry Trend
+    st.write("### 10. Expiry Month Trend")
     food_df["Expiry_Date"] = pd.to_datetime(food_df["Expiry_Date"])
-    expiry_count = food_df.groupby(food_df["Expiry_Date"].dt.month).size()
-    st.line_chart(expiry_count)
+    expiry = food_df.groupby(food_df["Expiry_Date"].dt.month).size()
+    st.line_chart(expiry)
 
-    # Graph 11: Receivers by City
+    # 11 Receivers by City
     st.write("### 11. Receivers by City")
     st.bar_chart(receivers_df["City"].value_counts())
 
-    # Graph 12: Claims per Receiver
+    # 12 Top Receivers Claims
     st.write("### 12. Top Receivers by Claims")
-    receiver_claims = claims_df["Receiver_ID"].value_counts().head(10)
-    st.bar_chart(receiver_claims)
+    st.bar_chart(claims_df["Receiver_ID"].value_counts().head(10))
 
-    # Graph 13: Provider with Most Listings
+    # 13 Top Providers Listings
     st.write("### 13. Top Providers by Listings")
-    provider_listings = food_df["Provider_ID"].value_counts().head(10)
-    st.bar_chart(provider_listings)
+    st.bar_chart(food_df["Provider_ID"].value_counts().head(10))
 
-    # Graph 14: Completed vs Pending Claims
-    st.write("### 14. Completed vs Pending Claims")
+    # 14 Pie Chart Claims Status
+    st.write("### 14. Claims Status Pie Chart")
     status = claims_df["Status"].value_counts()
     fig, ax = plt.subplots()
     ax.pie(status, labels=status.index, autopct="%1.1f%%")
     st.pyplot(fig)
 
-    # Graph 15: Quantity Donated by City
+    # 15 Quantity Donated by City
     st.write("### 15. Total Quantity Donated by City")
     qty_city = food_df.groupby("Location")["Quantity"].sum()
     st.bar_chart(qty_city)
 
-    st.success("✅ All 15 Graphs Displayed Successfully!")
+    st.success("✅ Dashboard with 15 Graphs Completed!")
 
 # ======================================================
 # FOOD LISTINGS PAGE
 # ======================================================
 elif menu == "Food Listings":
-    st.title("🍲 Food Listings Data")
+    st.title("🍲 Food Listings Table")
 
     conn = get_conn()
     df = pd.read_sql("SELECT * FROM food_listings", conn)
@@ -145,25 +135,19 @@ elif menu == "Food Listings":
     st.dataframe(df)
 
 # ======================================================
-# CLAIMS PAGE
+# SQL QUERIES (15 QUESTIONS)
 # ======================================================
-elif menu == "Claims":
-    st.title("📌 Claims Data")
+elif menu == "SQL Queries (15 Questions)":
+
+    st.title("📌 SQL Queries Output (15 Questions)")
+
+    st.write("Select any query below to see output:")
+
+    selected_query = st.selectbox("Choose Query", list(queries.keys()))
 
     conn = get_conn()
-    df = pd.read_sql("SELECT * FROM claims", conn)
+    result = pd.read_sql(queries[selected_query], conn)
     conn.close()
 
-    st.dataframe(df)
-
-# ======================================================
-# PROVIDERS PAGE
-# ======================================================
-elif menu == "Providers":
-    st.title("🏢 Providers Data")
-
-    conn = get_conn()
-    df = pd.read_sql("SELECT * FROM providers", conn)
-    conn.close()
-
-    st.dataframe(df)
+    st.subheader("Query Result")
+    st.dataframe(result)
