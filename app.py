@@ -1,8 +1,8 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
 import plotly.express as px
 from sklearn.linear_model import LinearRegression
+import sqlite3
 import os
 
 # ---------------- PAGE CONFIG ----------------
@@ -17,9 +17,7 @@ st.markdown("""
     background-attachment: fixed;
 }
 
-[data-testid="stHeader"] {
-    background: transparent;
-}
+[data-testid="stHeader"] {background: transparent;}
 
 .stTextInput>div>div>input:focus {
     box-shadow: none !important;
@@ -47,63 +45,11 @@ h1,h2,h3,label {color:white !important;}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- DATABASE ----------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(BASE_DIR, "food_waste.db")
-
-conn = sqlite3.connect(db_path, check_same_thread=False)
-cur = conn.cursor()
-
-# CREATE TABLES
-cur.execute("""
-CREATE TABLE IF NOT EXISTS users (
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-username TEXT UNIQUE,
-password TEXT,
-role TEXT
-)
-""")
-
-cur.execute("CREATE TABLE IF NOT EXISTS providers (id INTEGER PRIMARY KEY, name TEXT, city TEXT)")
-cur.execute("CREATE TABLE IF NOT EXISTS receivers (id INTEGER PRIMARY KEY, name TEXT, type TEXT)")
-cur.execute("""CREATE TABLE IF NOT EXISTS food_listings (
-id INTEGER PRIMARY KEY, food_name TEXT, quantity INTEGER,
-food_type TEXT, meal_type TEXT, city TEXT,
-expiry_date DATE, status TEXT, provider_id INTEGER)""")
-cur.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY, food_id INTEGER, receiver_id INTEGER)")
-
-# INSERT ADMIN (FIXED)
-cur.execute("SELECT * FROM users WHERE username=?", ("admin",))
-if not cur.fetchone():
-    cur.execute(
-        "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-        ("admin", "1234", "admin")
-    )
-    conn.commit()
-
-# SAMPLE DATA
-if cur.execute("SELECT COUNT(*) FROM providers").fetchone()[0] == 0:
-    cur.execute("INSERT INTO providers VALUES (1,'Hotel Taj','Delhi'),(2,'Food Hub','Mumbai')")
-
-if cur.execute("SELECT COUNT(*) FROM receivers").fetchone()[0] == 0:
-    cur.execute("INSERT INTO receivers VALUES (1,'NGO','NGO'),(2,'Shelter','Shelter')")
-
-if cur.execute("SELECT COUNT(*) FROM food_listings").fetchone()[0] == 0:
-    cur.execute("""
-    INSERT INTO food_listings VALUES
-    (1,'Rice',10,'Veg','Lunch','Delhi','2026-04-10','Available',1),
-    (2,'Bread',5,'Veg','Breakfast','Noida','2026-04-08','Expired',1),
-    (3,'Chicken',8,'Non-Veg','Dinner','Mumbai','2026-04-11','Available',2)
-    """)
-
-conn.commit()
-
-# ---------------- LOGIN FUNCTION ----------------
+# ---------------- LOGIN FIX (NO DB) ----------------
 def login(username, password):
-    return conn.execute(
-        "SELECT * FROM users WHERE username=? AND password=?",
-        (username, password)
-    ).fetchone()
+    if username == "admin" and password == "1234":
+        return True
+    return False
 
 # SESSION
 if "login" not in st.session_state:
@@ -139,18 +85,47 @@ if not st.session_state.login:
         p = st.text_input("Password", type="password")
 
         if st.button("Login"):
-            user = login(u, p)
-            if user:
+            if login(u, p):
                 st.session_state.login = True
-                st.session_state.role = user[3]
-                st.success("Login Successful")
+                st.session_state.role = "admin"
+                st.success("Login Successful ✅")
                 st.rerun()
             else:
-                st.error("Invalid username or password")
+                st.error("Invalid username or password ❌")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.stop()
+
+# ---------------- DATABASE (ONLY FOR DATA) ----------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(BASE_DIR, "food_waste.db")
+
+conn = sqlite3.connect(db_path, check_same_thread=False)
+cur = conn.cursor()
+
+cur.execute("CREATE TABLE IF NOT EXISTS providers (id INTEGER PRIMARY KEY, name TEXT, city TEXT)")
+cur.execute("CREATE TABLE IF NOT EXISTS receivers (id INTEGER PRIMARY KEY, name TEXT, type TEXT)")
+cur.execute("""CREATE TABLE IF NOT EXISTS food_listings (
+id INTEGER PRIMARY KEY, food_name TEXT, quantity INTEGER,
+food_type TEXT, meal_type TEXT, city TEXT,
+expiry_date DATE, status TEXT, provider_id INTEGER)""")
+cur.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY, food_id INTEGER, receiver_id INTEGER)")
+
+# SAMPLE DATA
+if cur.execute("SELECT COUNT(*) FROM providers").fetchone()[0] == 0:
+    cur.execute("INSERT INTO providers VALUES (1,'Hotel Taj','Delhi'),(2,'Food Hub','Mumbai')")
+if cur.execute("SELECT COUNT(*) FROM receivers").fetchone()[0] == 0:
+    cur.execute("INSERT INTO receivers VALUES (1,'NGO','NGO'),(2,'Shelter','Shelter')")
+if cur.execute("SELECT COUNT(*) FROM food_listings").fetchone()[0] == 0:
+    cur.execute("""
+    INSERT INTO food_listings VALUES
+    (1,'Rice',10,'Veg','Lunch','Delhi','2026-04-10','Available',1),
+    (2,'Bread',5,'Veg','Breakfast','Noida','2026-04-08','Expired',1),
+    (3,'Chicken',8,'Non-Veg','Dinner','Mumbai','2026-04-11','Available',2)
+    """)
+
+conn.commit()
 
 # ---------------- SIDEBAR ----------------
 menu = st.sidebar.radio("📊 Menu", ["🏠 Dashboard","🤖 ML","🛠 Admin"])
@@ -174,7 +149,14 @@ if menu == "🏠 Dashboard":
 
     st.subheader("📈 Charts")
 
-    st.plotly_chart(px.bar(pd.read_sql("SELECT city, COUNT(*) FROM providers GROUP BY city", conn), x="city", y="COUNT(*)"))
+    df1 = pd.read_sql("SELECT city, COUNT(*) as total FROM providers GROUP BY city", conn)
+    st.plotly_chart(px.bar(df1, x="city", y="total"))
+
+    df2 = pd.read_sql("SELECT food_type, COUNT(*) as total FROM food_listings GROUP BY food_type", conn)
+    st.plotly_chart(px.pie(df2, names="food_type", values="total"))
+
+    df3 = pd.read_sql("SELECT meal_type, COUNT(*) as total FROM food_listings GROUP BY meal_type", conn)
+    st.plotly_chart(px.pie(df3, names="meal_type", values="total"))
 
 # ---------------- ML ----------------
 elif menu == "🤖 ML":
@@ -202,10 +184,6 @@ elif menu == "🤖 ML":
 
 # ---------------- ADMIN ----------------
 elif menu == "🛠 Admin":
-
-    if st.session_state.role != "admin":
-        st.error("Access Denied")
-        st.stop()
 
     st.title("Admin Panel")
 
