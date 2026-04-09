@@ -8,11 +8,11 @@ import os
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Food Waste Dashboard", layout="wide")
 
-# ---------------- PREMIUM CSS ----------------
+# ---------------- CSS ----------------
 st.markdown("""
 <style>
 
-/* REMOVE BLUE EFFECT */
+/* REMOVE BLUE HIGHLIGHT */
 .stTextInput>div>div>input:focus {
     box-shadow: none !important;
     border: 1px solid #555 !important;
@@ -31,17 +31,16 @@ st.markdown("""
     background: transparent;
 }
 
-/* GLASS UI */
+/* GLASS CARD */
 .glass {
     background: rgba(0,0,0,0.65);
     padding: 30px;
     border-radius: 20px;
     backdrop-filter: blur(12px);
     color: white;
-    box-shadow: 0px 8px 30px rgba(0,0,0,0.6);
 }
 
-/* KPI CARDS */
+/* KPI */
 .kpi {
     background: linear-gradient(135deg,#00C9A7,#007CF0);
     padding:25px;
@@ -49,9 +48,7 @@ st.markdown("""
     color:white;
     text-align:center;
     font-weight:bold;
-    transition:0.3s;
 }
-.kpi:hover {transform:scale(1.05);}
 
 /* ANIMATION */
 .fade {
@@ -115,7 +112,7 @@ if not st.session_state.login:
 
     col1,col2 = st.columns(2)
 
-    # OVERVIEW
+    # PROJECT OVERVIEW
     with col1:
         st.markdown('<div class="glass fade">', unsafe_allow_html=True)
         st.subheader("📌 Project Overview")
@@ -146,7 +143,6 @@ if not st.session_state.login:
             else:
                 st.error("Invalid Credentials")
 
-        st.markdown("<small>Use: admin / 1234</small>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.stop()
@@ -181,6 +177,7 @@ if menu=="🏠 Dashboard":
     st.plotly_chart(px.bar(pd.read_sql("SELECT status, COUNT(*) as total FROM food_listings GROUP BY status",conn),x="status",y="total"))
     st.plotly_chart(px.line(pd.read_sql("SELECT city, COUNT(*) as total FROM food_listings GROUP BY city",conn),x="city",y="total"))
     st.plotly_chart(px.bar(pd.read_sql("SELECT food_type, status, COUNT(*) as total FROM food_listings GROUP BY food_type, status",conn),x="food_type",y="total",color="status"))
+
     df = pd.read_sql("SELECT quantity, city FROM food_listings",conn)
     st.plotly_chart(px.scatter(df,x="city",y="quantity"))
     st.plotly_chart(px.histogram(df,x="quantity"))
