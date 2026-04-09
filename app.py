@@ -14,29 +14,31 @@ st.markdown("""
 .stApp {
     background-image: url("https://images.unsplash.com/photo-1504674900247-0877df9cc836");
     background-size: cover;
+    background-attachment: fixed;
 }
 [data-testid="stHeader"] {background: transparent;}
 
 .glass {
-    background: rgba(0,0,0,0.65);
-    padding: 30px;
-    border-radius: 20px;
+    background: rgba(0,0,0,0.7);
+    padding: 25px;
+    border-radius: 15px;
     color: white;
 }
 
 .kpi {
     background: linear-gradient(135deg,#00C9A7,#007CF0);
     padding:20px;
-    border-radius:15px;
+    border-radius:12px;
     color:white;
     text-align:center;
+    font-weight:bold;
 }
 
 h1,h2,h3,label {color:white !important;}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- LOGIN (NO ERROR) ----------------
+# ---------------- LOGIN (NO DB ISSUE) ----------------
 def login(u, p):
     return u == "admin" and p == "1234"
 
@@ -48,21 +50,11 @@ if not st.session_state.login:
 
     st.markdown("<h1 style='text-align:center;'>🍱 Food Waste Management</h1>", unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown('<div class="glass">', unsafe_allow_html=True)
-        st.subheader("📌 Project Overview")
-        st.write("""
-✔ Reduce food waste  
-✔ SQL analytics dashboard  
-✔ ML prediction  
-✔ Admin control  
-        """)
-        st.markdown('</div>', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1,2,1])
 
     with col2:
         st.markdown('<div class="glass">', unsafe_allow_html=True)
+
         st.subheader("🔐 Login")
 
         u = st.text_input("Username")
@@ -71,10 +63,10 @@ if not st.session_state.login:
         if st.button("Login"):
             if login(u, p):
                 st.session_state.login = True
-                st.success("Login Successful")
+                st.success("Login Successful ✅")
                 st.rerun()
             else:
-                st.error("Invalid Credentials")
+                st.error("Invalid Credentials ❌")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -96,13 +88,11 @@ food_type TEXT, meal_type TEXT, city TEXT,
 expiry_date DATE, status TEXT, provider_id INTEGER)""")
 cur.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY, food_id INTEGER, receiver_id INTEGER)")
 
-# INSERT SAMPLE DATA
+# SAMPLE DATA
 if cur.execute("SELECT COUNT(*) FROM providers").fetchone()[0] == 0:
     cur.execute("INSERT INTO providers VALUES (1,'Hotel Taj','Delhi'),(2,'Food Hub','Mumbai')")
-
 if cur.execute("SELECT COUNT(*) FROM receivers").fetchone()[0] == 0:
     cur.execute("INSERT INTO receivers VALUES (1,'NGO','NGO'),(2,'Shelter','Shelter')")
-
 if cur.execute("SELECT COUNT(*) FROM food_listings").fetchone()[0] == 0:
     cur.execute("""
     INSERT INTO food_listings VALUES
@@ -113,27 +103,44 @@ if cur.execute("SELECT COUNT(*) FROM food_listings").fetchone()[0] == 0:
 
 conn.commit()
 
-# ---------------- SAFE QUERY FUNCTION ----------------
-def safe_query(query):
+# ---------------- SAFE QUERY ----------------
+def safe_query(q):
     try:
-        df = pd.read_sql(query, conn)
-        return df
+        return pd.read_sql(q, conn)
     except:
         return pd.DataFrame()
 
 # ---------------- SIDEBAR ----------------
-menu = st.sidebar.radio("Menu", ["Dashboard", "ML", "Admin"])
+menu = st.sidebar.radio("📊 Menu", ["Dashboard", "ML", "Admin"])
 
 # ---------------- DASHBOARD ----------------
 if menu == "Dashboard":
 
     st.title("📊 Dashboard")
 
+    # PROJECT OVERVIEW (AFTER LOGIN)
+    st.markdown('<div class="glass">', unsafe_allow_html=True)
+    st.subheader("📌 Project Overview")
+    st.write("""
+This system reduces food waste by connecting providers and receivers.
+
+✔ SQL Analytics  
+✔ 12 Charts  
+✔ ML Prediction  
+✔ Admin Control  
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # KPI
     c1, c2, c3 = st.columns(3)
 
-    c1.metric("Food", safe_query("SELECT COUNT(*) AS total FROM food_listings")["total"][0])
-    c2.metric("Providers", safe_query("SELECT COUNT(*) AS total FROM providers")["total"][0])
-    c3.metric("Receivers", safe_query("SELECT COUNT(*) AS total FROM receivers")["total"][0])
+    food = safe_query("SELECT COUNT(*) AS total FROM food_listings")
+    prov = safe_query("SELECT COUNT(*) AS total FROM providers")
+    recv = safe_query("SELECT COUNT(*) AS total FROM receivers")
+
+    c1.markdown(f"<div class='kpi'>🍱<br>{food.iloc[0,0]}</div>", unsafe_allow_html=True)
+    c2.markdown(f"<div class='kpi'>🏢<br>{prov.iloc[0,0]}</div>", unsafe_allow_html=True)
+    c3.markdown(f"<div class='kpi'>👥<br>{recv.iloc[0,0]}</div>", unsafe_allow_html=True)
 
     st.subheader("📈 Charts")
 
@@ -180,7 +187,7 @@ elif menu == "Admin":
 
     st.title("Admin Panel")
 
-    if st.button("Delete Expired"):
+    if st.button("Delete Expired Food"):
         conn.execute("DELETE FROM food_listings WHERE expiry_date < DATE('now')")
         conn.commit()
         st.success("Deleted")
