@@ -1,35 +1,26 @@
 import streamlit as st
+import sqlite3
 import pandas as pd
 import plotly.express as px
-import sqlite3
-import numpy as np
-import random
 
-# ---------------- CONFIG ----------------
-st.set_page_config(page_title="Food Waste Dashboard", layout="wide")
+st.set_page_config(page_title="Food Waste App", layout="wide")
 
-# ---------------- CSS (ANIMATION) ----------------
-st.markdown("""
-<style>
-.stApp {
-    background: linear-gradient(to right,#0f2027,#203a43,#2c5364);
-}
-.kpi {
-    background: linear-gradient(135deg,#00C9A7,#007CF0);
-    padding:20px;
-    border-radius:15px;
-    color:white;
-    text-align:center;
-    font-weight:bold;
-    animation: fadeIn 1s ease-in;
-}
-@keyframes fadeIn {
-    from {opacity:0; transform:translateY(10px);}
-    to {opacity:1; transform:translateY(0);}
-}
-h1,h2,h3 {color:white;}
-</style>
-""", unsafe_allow_html=True)
+# ---------------- DB ----------------
+conn = sqlite3.connect("food.db", check_same_thread=False)
+cur = conn.cursor()
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS food_listings (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+food_type TEXT,
+meal_type TEXT,
+city TEXT,
+quantity INTEGER,
+status TEXT
+)
+""")
+
+conn.commit()
 
 # ---------------- LOGIN ----------------
 def login(u,p):
@@ -48,79 +39,93 @@ if not st.session_state.login:
             st.session_state.login=True
             st.rerun()
         else:
-            st.error("Invalid Login")
+            st.error("Invalid")
     st.stop()
 
-# ---------------- DB ----------------
-conn = sqlite3.connect("food_waste.db", check_same_thread=False)
+# ---------------- SIDEBAR ----------------
+menu = st.sidebar.radio("Navigation",[
+    "Project Introduction",
+    "CRUD Operations",
+    "SQL Queries",
+    "Waste Food Data Visualization"
+])
 
-# ---------------- AUTO DATA (1000 ROWS) ----------------
-cur = conn.cursor()
-cur.execute("""CREATE TABLE IF NOT EXISTS food_listings (
-id INTEGER PRIMARY KEY,
-food_type TEXT,
-meal_type TEXT,
-city TEXT,
-quantity INTEGER,
-status TEXT
-)""")
+# ---------------- INTRO ----------------
+if menu=="Project Introduction":
+    st.title("🍱 Food Waste Management")
+    st.info("System to reduce food waste using analytics")
 
-if cur.execute("SELECT COUNT(*) FROM food_listings").fetchone()[0] < 1000:
+# ---------------- CRUD ----------------
+elif menu=="CRUD Operations":
 
-    cities = ["Delhi","Mumbai","Noida","Bangalore","Pune"]
-    food_types = ["Veg","Non-Veg"]
-    meals = ["Breakfast","Lunch","Dinner"]
-    status = ["Available","Expired"]
+    st.title("🛠 CRUD Operations")
 
-    for i in range(1000):
-        cur.execute("INSERT INTO food_listings VALUES (?,?,?,?,?,?)",(
-            i,
-            random.choice(food_types),
-            random.choice(meals),
-            random.choice(cities),
-            random.randint(1,50),
-            random.choice(status)
-        ))
+    # ADD
+    st.subheader("Add Food")
+    food = st.text_input("Food Type")
+    meal = st.selectbox("Meal",["Breakfast","Lunch","Dinner"])
+    city = st.text_input("City")
+    qty = st.number_input("Quantity",0,100)
+    status = st.selectbox("Status",["Available","Expired"])
 
-    conn.commit()
+    if st.button("Add"):
+        cur.execute("INSERT INTO food_listings (food_type,meal_type,city,quantity,status) VALUES (?,?,?,?,?)",
+                    (food,meal,city,qty,status))
+        conn.commit()
+        st.success("Added")
 
-# ---------------- LOAD DATA ----------------
-df = pd.read_sql("SELECT * FROM food_listings", conn)
+    # VIEW
+    df = pd.read_sql("SELECT * FROM food_listings",conn)
+    st.subheader("All Data")
+    st.dataframe(df)
 
-# ---------------- FILTERS ----------------
-st.sidebar.header("🔍 Filters")
+    # DELETE
+    delete_id = st.number_input("Delete ID",0,1000)
+    if st.button("Delete"):
+        cur.execute("DELETE FROM food_listings WHERE id=?", (delete_id,))
+        conn.commit()
+        st.success("Deleted")
 
-city_filter = st.sidebar.multiselect("City", df["city"].unique(), default=df["city"].unique())
-food_filter = st.sidebar.multiselect("Food Type", df["food_type"].unique(), default=df["food_type"].unique())
+# ---------------- SQL ----------------
+elif menu=="SQL Queries":
 
-df = df[(df["city"].isin(city_filter)) & (df["food_type"].isin(food_filter))]
+    st.title("🧠 SQL Queries")
 
-# ---------------- KPI ----------------
-st.title("📊 Food Waste Dashboard")
+    query = st.selectbox("Select Query",[
+        "Providers per City",
+        "Food Type Count",
+        "Meal Type Count",
+        "Status Count"
+    ])
 
-c1,c2,c3 = st.columns(3)
+    if query=="Providers per City":
+        df = pd.read_sql("SELECT city, COUNT(*) as total FROM food_listings GROUP BY city",conn)
 
-c1.markdown(f"<div class='kpi'>🍱<br>{len(df)}<br>Total Records</div>", unsafe_allow_html=True)
-c2.markdown(f"<div class='kpi'>🏙️<br>{df['city'].nunique()}<br>Cities</div>", unsafe_allow_html=True)
-c3.markdown(f"<div class='kpi'>🍴<br>{df['food_type'].nunique()}<br>Food Types</div>", unsafe_allow_html=True)
+    elif query=="Food Type Count":
+        df = pd.read_sql("SELECT food_type, COUNT(*) as total FROM food_listings GROUP BY food_type",conn)
 
-# ---------------- OVERVIEW ----------------
-st.info("AI-powered dashboard to reduce food waste with real-time filtering & analytics")
+    elif query=="Meal Type Count":
+        df = pd.read_sql("SELECT meal_type, COUNT(*) as total FROM food_listings GROUP BY meal_type",conn)
 
-# ---------------- CHARTS ----------------
-st.subheader("📈 Analytics")
+    elif query=="Status Count":
+        df = pd.read_sql("SELECT status, COUNT(*) as total FROM food_listings GROUP BY status",conn)
 
-col1,col2 = st.columns(2)
+    st.dataframe(df)
 
-with col1:
-    st.plotly_chart(px.bar(df.groupby("city").size().reset_index(name="count"), x="city", y="count", title="City Distribution"))
-    st.plotly_chart(px.pie(df, names="food_type", title="Food Type"))
-    st.plotly_chart(px.histogram(df, x="quantity", title="Quantity Distribution"))
+# ---------------- VISUAL ----------------
+elif menu=="Waste Food Data Visualization":
 
-with col2:
-    st.plotly_chart(px.line(df.groupby("city")["quantity"].mean().reset_index(), x="city", y="quantity", title="Avg Quantity"))
-    st.plotly_chart(px.bar(df.groupby("meal_type").size().reset_index(name="count"), x="meal_type", y="count", title="Meal Type"))
-    st.plotly_chart(px.bar(df.groupby("status").size().reset_index(name="count"), x="status", y="count", title="Status"))
+    st.title("📈 Visualization")
+
+    df = pd.read_sql("SELECT * FROM food_listings",conn)
+
+    if df.empty:
+        st.warning("No Data Available")
+    else:
+        st.plotly_chart(px.bar(df, x="city", y="quantity", color="food_type"))
+        st.plotly_chart(px.pie(df, names="food_type"))
+        st.plotly_chart(px.bar(df, x="meal_type", y="quantity"))
+        st.plotly_chart(px.bar(df, x="status", y="quantity"))
 
 # ---------------- LOGOUT ----------------
 if st.sidebar.button("Logout"):
