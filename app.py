@@ -12,35 +12,33 @@ st.set_page_config(page_title="Food Waste Dashboard", layout="wide")
 st.markdown("""
 <style>
 
+/* REMOVE BLUE EFFECT */
+.stTextInput>div>div>input:focus {
+    box-shadow: none !important;
+    border: 1px solid #555 !important;
+}
+.stAlert {display:none !important;}
+
 /* BACKGROUND */
 .stApp {
     background-image: url("https://images.unsplash.com/photo-1504674900247-0877df9cc836");
     background-size: cover;
-    background-position: center;
     background-attachment: fixed;
 }
 
-/* REMOVE HEADER BLACK BAR */
+/* REMOVE HEADER */
 [data-testid="stHeader"] {
     background: transparent;
 }
 
-/* LOGIN GLASS CARD */
-.login-card {
-    background: rgba(255,255,255,0.1);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    padding: 40px;
+/* GLASS UI */
+.glass {
+    background: rgba(0,0,0,0.65);
+    padding: 30px;
     border-radius: 20px;
+    backdrop-filter: blur(12px);
     color: white;
-    box-shadow: 0px 8px 32px rgba(0,0,0,0.5);
-    animation: fadeIn 1.2s ease-in-out;
-}
-
-/* FADE-IN ANIMATION */
-@keyframes fadeIn {
-    from {opacity: 0; transform: translateY(20px);}
-    to {opacity: 1; transform: translateY(0);}
+    box-shadow: 0px 8px 30px rgba(0,0,0,0.6);
 }
 
 /* KPI CARDS */
@@ -50,19 +48,21 @@ st.markdown("""
     border-radius:15px;
     color:white;
     text-align:center;
-    font-size:20px;
     font-weight:bold;
-    box-shadow:0px 6px 20px rgba(0,0,0,0.4);
-    transition: transform 0.3s;
+    transition:0.3s;
 }
-.kpi:hover {
-    transform: scale(1.05);
+.kpi:hover {transform:scale(1.05);}
+
+/* ANIMATION */
+.fade {
+    animation: fadeIn 1s ease-in;
+}
+@keyframes fadeIn {
+    from {opacity:0; transform:translateY(20px);}
+    to {opacity:1; transform:translateY(0);}
 }
 
-/* TEXT */
-h1,h2,h3,h4,label {
-    color:white !important;
-}
+h1,h2,h3,label {color:white !important;}
 
 </style>
 """, unsafe_allow_html=True)
@@ -74,7 +74,6 @@ db_path = os.path.join(BASE_DIR, "food_waste.db")
 conn = sqlite3.connect(db_path, check_same_thread=False)
 cur = conn.cursor()
 
-# CREATE TABLES
 cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, role TEXT)")
 cur.execute("CREATE TABLE IF NOT EXISTS providers (id INTEGER PRIMARY KEY, name TEXT, city TEXT)")
 cur.execute("CREATE TABLE IF NOT EXISTS receivers (id INTEGER PRIMARY KEY, name TEXT, type TEXT)")
@@ -84,7 +83,7 @@ food_type TEXT, meal_type TEXT, city TEXT,
 expiry_date DATE, status TEXT, provider_id INTEGER)""")
 cur.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY, food_id INTEGER, receiver_id INTEGER)")
 
-# INSERT ADMIN (FIX LOGIN ISSUE)
+# INSERT ADMIN
 if not cur.execute("SELECT * FROM users WHERE username='admin'").fetchone():
     cur.execute("INSERT INTO users VALUES (1,'admin','1234','admin')")
 
@@ -102,7 +101,7 @@ if cur.execute("SELECT COUNT(*) FROM food_listings").fetchone()[0] == 0:
 
 conn.commit()
 
-# ---------------- LOGIN FUNCTION ----------------
+# ---------------- LOGIN ----------------
 def login(u,p):
     return conn.execute("SELECT * FROM users WHERE username=? AND password=?", (u,p)).fetchone()
 
@@ -114,11 +113,25 @@ if not st.session_state.login:
 
     st.markdown("<h1 style='text-align:center;'>🍱 Food Waste Management</h1>", unsafe_allow_html=True)
 
-    col1,col2,col3 = st.columns([1,2,1])
+    col1,col2 = st.columns(2)
 
+    # OVERVIEW
+    with col1:
+        st.markdown('<div class="glass fade">', unsafe_allow_html=True)
+        st.subheader("📌 Project Overview")
+        st.write("""
+✔ Reduce food waste  
+✔ Connect providers & receivers  
+✔ SQL analytics dashboard  
+✔ 12 advanced charts  
+✔ ML demand prediction  
+✔ Admin control system  
+        """)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # LOGIN
     with col2:
-        st.markdown('<div class="login-card">', unsafe_allow_html=True)
-
+        st.markdown('<div class="glass fade">', unsafe_allow_html=True)
         st.subheader("🔐 Login")
 
         u = st.text_input("Username")
@@ -129,13 +142,11 @@ if not st.session_state.login:
             if user:
                 st.session_state.login=True
                 st.session_state.role=user[3]
-                st.success("Login Successful ✅")
                 st.rerun()
             else:
-                st.error("Invalid Credentials ❌")
+                st.error("Invalid Credentials")
 
-        st.info("Use: admin / 1234")
-
+        st.markdown("<small>Use: admin / 1234</small>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.stop()
