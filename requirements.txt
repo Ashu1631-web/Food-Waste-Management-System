@@ -1,4 +1,5 @@
 streamlit
 pandas
-matplotlib
-sqlalchemy
+plotly
+scikit-learn
+numpy
