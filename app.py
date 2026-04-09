@@ -8,28 +8,62 @@ import os
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Food Waste Dashboard", layout="wide")
 
-# ---------------- PREMIUM UI ----------------
+# ---------------- PREMIUM CSS ----------------
 st.markdown("""
 <style>
+
+/* BACKGROUND */
 .stApp {
     background-image: url("https://images.unsplash.com/photo-1504674900247-0877df9cc836");
     background-size: cover;
+    background-position: center;
     background-attachment: fixed;
 }
-.card {
-    background: rgba(0,0,0,0.75);
-    padding: 25px;
-    border-radius: 15px;
-    color: white;
+
+/* REMOVE HEADER BLACK BAR */
+[data-testid="stHeader"] {
+    background: transparent;
 }
+
+/* LOGIN GLASS CARD */
+.login-card {
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    padding: 40px;
+    border-radius: 20px;
+    color: white;
+    box-shadow: 0px 8px 32px rgba(0,0,0,0.5);
+    animation: fadeIn 1.2s ease-in-out;
+}
+
+/* FADE-IN ANIMATION */
+@keyframes fadeIn {
+    from {opacity: 0; transform: translateY(20px);}
+    to {opacity: 1; transform: translateY(0);}
+}
+
+/* KPI CARDS */
 .kpi {
     background: linear-gradient(135deg,#00C9A7,#007CF0);
-    padding:20px;
-    border-radius:12px;
+    padding:25px;
+    border-radius:15px;
     color:white;
     text-align:center;
+    font-size:20px;
     font-weight:bold;
+    box-shadow:0px 6px 20px rgba(0,0,0,0.4);
+    transition: transform 0.3s;
 }
+.kpi:hover {
+    transform: scale(1.05);
+}
+
+/* TEXT */
+h1,h2,h3,h4,label {
+    color:white !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -41,6 +75,7 @@ conn = sqlite3.connect(db_path, check_same_thread=False)
 cur = conn.cursor()
 
 # CREATE TABLES
+cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, role TEXT)")
 cur.execute("CREATE TABLE IF NOT EXISTS providers (id INTEGER PRIMARY KEY, name TEXT, city TEXT)")
 cur.execute("CREATE TABLE IF NOT EXISTS receivers (id INTEGER PRIMARY KEY, name TEXT, type TEXT)")
 cur.execute("""CREATE TABLE IF NOT EXISTS food_listings (
@@ -48,11 +83,12 @@ id INTEGER PRIMARY KEY, food_name TEXT, quantity INTEGER,
 food_type TEXT, meal_type TEXT, city TEXT,
 expiry_date DATE, status TEXT, provider_id INTEGER)""")
 cur.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY, food_id INTEGER, receiver_id INTEGER)")
-cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, role TEXT)")
+
+# INSERT ADMIN (FIX LOGIN ISSUE)
+if not cur.execute("SELECT * FROM users WHERE username='admin'").fetchone():
+    cur.execute("INSERT INTO users VALUES (1,'admin','1234','admin')")
 
 # SAMPLE DATA
-if cur.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-    cur.execute("INSERT INTO users VALUES (1,'admin','1234','admin')")
 if cur.execute("SELECT COUNT(*) FROM providers").fetchone()[0] == 0:
     cur.execute("INSERT INTO providers VALUES (1,'Hotel Taj','Delhi'),(2,'Food Hub','Mumbai')")
 if cur.execute("SELECT COUNT(*) FROM receivers").fetchone()[0] == 0:
@@ -63,9 +99,10 @@ if cur.execute("SELECT COUNT(*) FROM food_listings").fetchone()[0] == 0:
     (2,'Bread',5,'Veg','Breakfast','Noida','2026-04-08','Expired',1),
     (3,'Chicken',8,'Non-Veg','Dinner','Mumbai','2026-04-11','Available',2)
     """)
+
 conn.commit()
 
-# ---------------- LOGIN ----------------
+# ---------------- LOGIN FUNCTION ----------------
 def login(u,p):
     return conn.execute("SELECT * FROM users WHERE username=? AND password=?", (u,p)).fetchone()
 
@@ -75,26 +112,15 @@ if "login" not in st.session_state:
 # ---------------- LOGIN PAGE ----------------
 if not st.session_state.login:
 
-    st.markdown("<h1 style='text-align:center;color:white;'>🍱 Food Waste Management</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center;'>🍱 Food Waste Management</h1>", unsafe_allow_html=True)
 
-    col1,col2 = st.columns([1,1])
-
-    with col1:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("📌 Project Overview")
-        st.write("""
-✔ Reduce food waste  
-✔ Connect providers & receivers  
-✔ SQL analytics dashboard  
-✔ 12 advanced charts  
-✔ ML demand prediction  
-✔ Admin control system  
-        """)
-        st.markdown('</div>', unsafe_allow_html=True)
+    col1,col2,col3 = st.columns([1,2,1])
 
     with col2:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="login-card">', unsafe_allow_html=True)
+
         st.subheader("🔐 Login")
+
         u = st.text_input("Username")
         p = st.text_input("Password", type="password")
 
@@ -103,11 +129,13 @@ if not st.session_state.login:
             if user:
                 st.session_state.login=True
                 st.session_state.role=user[3]
+                st.success("Login Successful ✅")
                 st.rerun()
             else:
-                st.error("Invalid")
+                st.error("Invalid Credentials ❌")
 
         st.info("Use: admin / 1234")
+
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.stop()
@@ -120,7 +148,6 @@ if menu=="🏠 Dashboard":
 
     st.title("📊 Dashboard")
 
-    # KPI
     c1,c2,c3,c4 = st.columns(4)
 
     total_food = pd.read_sql("SELECT COUNT(*) FROM food_listings", conn).iloc[0,0]
@@ -128,73 +155,38 @@ if menu=="🏠 Dashboard":
     total_recv = pd.read_sql("SELECT COUNT(*) FROM receivers", conn).iloc[0,0]
     total_claim = pd.read_sql("SELECT COUNT(*) FROM claims", conn).iloc[0,0]
 
-    c1.markdown(f"<div class='kpi'>🍱<br>{total_food}<br>Food</div>", unsafe_allow_html=True)
+    c1.markdown(f"<div class='kpi'>🍱<br>{total_food}<br>Total Food</div>", unsafe_allow_html=True)
     c2.markdown(f"<div class='kpi'>🏢<br>{total_prov}<br>Providers</div>", unsafe_allow_html=True)
     c3.markdown(f"<div class='kpi'>👥<br>{total_recv}<br>Receivers</div>", unsafe_allow_html=True)
     c4.markdown(f"<div class='kpi'>📦<br>{total_claim}<br>Claims</div>", unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # ---------------- 12 ADVANCED CHARTS ----------------
-
     st.subheader("📈 Advanced Charts")
 
-    # 1
-    df1 = pd.read_sql("SELECT city, COUNT(*) as total FROM providers GROUP BY city", conn)
-    st.plotly_chart(px.bar(df1, x="city", y="total", title="Providers by City"))
-
-    # 2
-    df2 = pd.read_sql("SELECT food_type, COUNT(*) as total FROM food_listings GROUP BY food_type", conn)
-    st.plotly_chart(px.pie(df2, names="food_type", values="total", title="Food Type"))
-
-    # 3
-    df3 = pd.read_sql("SELECT meal_type, COUNT(*) as total FROM food_listings GROUP BY meal_type", conn)
-    st.plotly_chart(px.pie(df3, names="meal_type", values="total"))
-
-    # 4
-    df4 = pd.read_sql("SELECT status, COUNT(*) as total FROM food_listings GROUP BY status", conn)
-    st.plotly_chart(px.bar(df4, x="status", y="total"))
-
-    # 5
-    df5 = pd.read_sql("SELECT city, COUNT(*) as total FROM food_listings GROUP BY city", conn)
-    st.plotly_chart(px.line(df5, x="city", y="total"))
-
-    # 6
-    df6 = pd.read_sql("SELECT food_type, status, COUNT(*) as total FROM food_listings GROUP BY food_type, status", conn)
-    st.plotly_chart(px.bar(df6, x="food_type", y="total", color="status"))
-
-    # 7
-    df7 = pd.read_sql("SELECT quantity, city FROM food_listings", conn)
-    st.plotly_chart(px.scatter(df7, x="city", y="quantity"))
-
-    # 8
-    st.plotly_chart(px.histogram(df7, x="quantity"))
-
-    # 9
-    df9 = pd.read_sql("SELECT meal_type, AVG(quantity) as avg_q FROM food_listings GROUP BY meal_type", conn)
-    st.plotly_chart(px.bar(df9, x="meal_type", y="avg_q"))
-
-    # 10
-    df10 = pd.read_sql("SELECT city, AVG(quantity) as avg_q FROM food_listings GROUP BY city", conn)
-    st.plotly_chart(px.line(df10, x="city", y="avg_q"))
-
-    # 11
-    df11 = pd.read_sql("SELECT food_type, AVG(quantity) as avg_q FROM food_listings GROUP BY food_type", conn)
-    st.plotly_chart(px.bar(df11, x="food_type", y="avg_q"))
-
-    # 12
-    df12 = pd.read_sql("SELECT meal_type, status, COUNT(*) as total FROM food_listings GROUP BY meal_type, status", conn)
-    st.plotly_chart(px.bar(df12, x="meal_type", y="total", color="status"))
+    st.plotly_chart(px.bar(pd.read_sql("SELECT city, COUNT(*) as total FROM providers GROUP BY city",conn),x="city",y="total"))
+    st.plotly_chart(px.pie(pd.read_sql("SELECT food_type, COUNT(*) as total FROM food_listings GROUP BY food_type",conn),names="food_type",values="total"))
+    st.plotly_chart(px.pie(pd.read_sql("SELECT meal_type, COUNT(*) as total FROM food_listings GROUP BY meal_type",conn),names="meal_type",values="total"))
+    st.plotly_chart(px.bar(pd.read_sql("SELECT status, COUNT(*) as total FROM food_listings GROUP BY status",conn),x="status",y="total"))
+    st.plotly_chart(px.line(pd.read_sql("SELECT city, COUNT(*) as total FROM food_listings GROUP BY city",conn),x="city",y="total"))
+    st.plotly_chart(px.bar(pd.read_sql("SELECT food_type, status, COUNT(*) as total FROM food_listings GROUP BY food_type, status",conn),x="food_type",y="total",color="status"))
+    df = pd.read_sql("SELECT quantity, city FROM food_listings",conn)
+    st.plotly_chart(px.scatter(df,x="city",y="quantity"))
+    st.plotly_chart(px.histogram(df,x="quantity"))
+    st.plotly_chart(px.bar(pd.read_sql("SELECT meal_type, AVG(quantity) as avg FROM food_listings GROUP BY meal_type",conn),x="meal_type",y="avg"))
+    st.plotly_chart(px.line(pd.read_sql("SELECT city, AVG(quantity) as avg FROM food_listings GROUP BY city",conn),x="city",y="avg"))
+    st.plotly_chart(px.bar(pd.read_sql("SELECT food_type, AVG(quantity) as avg FROM food_listings GROUP BY food_type",conn),x="food_type",y="avg"))
+    st.plotly_chart(px.bar(pd.read_sql("SELECT meal_type, status, COUNT(*) as total FROM food_listings GROUP BY meal_type, status",conn),x="meal_type",y="total",color="status"))
 
 # ---------------- ML ----------------
 elif menu=="🤖 ML":
 
     st.title("🤖 Demand Prediction")
 
-    df = pd.read_sql("SELECT quantity, food_type, city FROM food_listings", conn)
+    df = pd.read_sql("SELECT quantity, food_type, city FROM food_listings",conn)
     df = pd.get_dummies(df)
 
-    X = df.drop("quantity", axis=1)
+    X = df.drop("quantity",axis=1)
     y = df["quantity"]
 
     model = LinearRegression()
@@ -208,8 +200,7 @@ elif menu=="🤖 ML":
         inp.columns = X.columns
         inp[food]=1
         inp[city]=1
-        pred = model.predict(inp)[0]
-        st.success(f"Prediction: {round(pred,2)}")
+        st.success(f"Prediction: {round(model.predict(inp)[0],2)}")
 
 # ---------------- ADMIN ----------------
 elif menu=="🛠 Admin":
