@@ -1,198 +1,128 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from sklearn.linear_model import LinearRegression
 import sqlite3
-import os
+import numpy as np
+import random
 
-# ---------------- PAGE CONFIG ----------------
+# ---------------- CONFIG ----------------
 st.set_page_config(page_title="Food Waste Dashboard", layout="wide")
 
-# ---------------- CSS ----------------
+# ---------------- CSS (ANIMATION) ----------------
 st.markdown("""
 <style>
 .stApp {
-    background-image: url("https://images.unsplash.com/photo-1504674900247-0877df9cc836");
-    background-size: cover;
-    background-attachment: fixed;
+    background: linear-gradient(to right,#0f2027,#203a43,#2c5364);
 }
-[data-testid="stHeader"] {background: transparent;}
-
-.glass {
-    background: rgba(0,0,0,0.7);
-    padding: 25px;
-    border-radius: 15px;
-    color: white;
-}
-
 .kpi {
     background: linear-gradient(135deg,#00C9A7,#007CF0);
     padding:20px;
-    border-radius:12px;
+    border-radius:15px;
     color:white;
     text-align:center;
     font-weight:bold;
+    animation: fadeIn 1s ease-in;
 }
-
-h1,h2,h3,label {color:white !important;}
+@keyframes fadeIn {
+    from {opacity:0; transform:translateY(10px);}
+    to {opacity:1; transform:translateY(0);}
+}
+h1,h2,h3 {color:white;}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- LOGIN (NO DB ISSUE) ----------------
-def login(u, p):
-    return u == "admin" and p == "1234"
+# ---------------- LOGIN ----------------
+def login(u,p):
+    return u=="admin" and p=="1234"
 
 if "login" not in st.session_state:
-    st.session_state.login = False
+    st.session_state.login=False
 
-# ---------------- LOGIN PAGE ----------------
 if not st.session_state.login:
+    st.title("🔐 Login")
+    u=st.text_input("Username")
+    p=st.text_input("Password", type="password")
 
-    st.markdown("<h1 style='text-align:center;'>🍱 Food Waste Management</h1>", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns([1,2,1])
-
-    with col2:
-        st.markdown('<div class="glass">', unsafe_allow_html=True)
-
-        st.subheader("🔐 Login")
-
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
-
-        if st.button("Login"):
-            if login(u, p):
-                st.session_state.login = True
-                st.success("Login Successful ✅")
-                st.rerun()
-            else:
-                st.error("Invalid Credentials ❌")
-
-        st.markdown('</div>', unsafe_allow_html=True)
-
+    if st.button("Login"):
+        if login(u,p):
+            st.session_state.login=True
+            st.rerun()
+        else:
+            st.error("Invalid Login")
     st.stop()
 
-# ---------------- DATABASE ----------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(BASE_DIR, "food_waste.db")
+# ---------------- DB ----------------
+conn = sqlite3.connect("food_waste.db", check_same_thread=False)
 
-conn = sqlite3.connect(db_path, check_same_thread=False)
+# ---------------- AUTO DATA (1000 ROWS) ----------------
 cur = conn.cursor()
-
-# CREATE TABLES
-cur.execute("CREATE TABLE IF NOT EXISTS providers (id INTEGER PRIMARY KEY, name TEXT, city TEXT)")
-cur.execute("CREATE TABLE IF NOT EXISTS receivers (id INTEGER PRIMARY KEY, name TEXT, type TEXT)")
 cur.execute("""CREATE TABLE IF NOT EXISTS food_listings (
-id INTEGER PRIMARY KEY, food_name TEXT, quantity INTEGER,
-food_type TEXT, meal_type TEXT, city TEXT,
-expiry_date DATE, status TEXT, provider_id INTEGER)""")
-cur.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY, food_id INTEGER, receiver_id INTEGER)")
+id INTEGER PRIMARY KEY,
+food_type TEXT,
+meal_type TEXT,
+city TEXT,
+quantity INTEGER,
+status TEXT
+)""")
 
-# SAMPLE DATA
-if cur.execute("SELECT COUNT(*) FROM providers").fetchone()[0] == 0:
-    cur.execute("INSERT INTO providers VALUES (1,'Hotel Taj','Delhi'),(2,'Food Hub','Mumbai')")
-if cur.execute("SELECT COUNT(*) FROM receivers").fetchone()[0] == 0:
-    cur.execute("INSERT INTO receivers VALUES (1,'NGO','NGO'),(2,'Shelter','Shelter')")
-if cur.execute("SELECT COUNT(*) FROM food_listings").fetchone()[0] == 0:
-    cur.execute("""
-    INSERT INTO food_listings VALUES
-    (1,'Rice',10,'Veg','Lunch','Delhi','2026-04-10','Available',1),
-    (2,'Bread',5,'Veg','Breakfast','Noida','2026-04-08','Expired',1),
-    (3,'Chicken',8,'Non-Veg','Dinner','Mumbai','2026-04-11','Available',2)
-    """)
+if cur.execute("SELECT COUNT(*) FROM food_listings").fetchone()[0] < 1000:
 
-conn.commit()
+    cities = ["Delhi","Mumbai","Noida","Bangalore","Pune"]
+    food_types = ["Veg","Non-Veg"]
+    meals = ["Breakfast","Lunch","Dinner"]
+    status = ["Available","Expired"]
 
-# ---------------- SAFE QUERY ----------------
-def safe_query(q):
-    try:
-        return pd.read_sql(q, conn)
-    except:
-        return pd.DataFrame()
+    for i in range(1000):
+        cur.execute("INSERT INTO food_listings VALUES (?,?,?,?,?,?)",(
+            i,
+            random.choice(food_types),
+            random.choice(meals),
+            random.choice(cities),
+            random.randint(1,50),
+            random.choice(status)
+        ))
 
-# ---------------- SIDEBAR ----------------
-menu = st.sidebar.radio("📊 Menu", ["Dashboard", "ML", "Admin"])
+    conn.commit()
 
-# ---------------- DASHBOARD ----------------
-if menu == "Dashboard":
+# ---------------- LOAD DATA ----------------
+df = pd.read_sql("SELECT * FROM food_listings", conn)
 
-    st.title("📊 Dashboard")
+# ---------------- FILTERS ----------------
+st.sidebar.header("🔍 Filters")
 
-    # PROJECT OVERVIEW (AFTER LOGIN)
-    st.markdown('<div class="glass">', unsafe_allow_html=True)
-    st.subheader("📌 Project Overview")
-    st.write("""
-This system reduces food waste by connecting providers and receivers.
+city_filter = st.sidebar.multiselect("City", df["city"].unique(), default=df["city"].unique())
+food_filter = st.sidebar.multiselect("Food Type", df["food_type"].unique(), default=df["food_type"].unique())
 
-✔ SQL Analytics  
-✔ 12 Charts  
-✔ ML Prediction  
-✔ Admin Control  
-    """)
-    st.markdown('</div>', unsafe_allow_html=True)
+df = df[(df["city"].isin(city_filter)) & (df["food_type"].isin(food_filter))]
 
-    # KPI
-    c1, c2, c3 = st.columns(3)
+# ---------------- KPI ----------------
+st.title("📊 Food Waste Dashboard")
 
-    food = safe_query("SELECT COUNT(*) AS total FROM food_listings")
-    prov = safe_query("SELECT COUNT(*) AS total FROM providers")
-    recv = safe_query("SELECT COUNT(*) AS total FROM receivers")
+c1,c2,c3 = st.columns(3)
 
-    c1.markdown(f"<div class='kpi'>🍱<br>{food.iloc[0,0]}</div>", unsafe_allow_html=True)
-    c2.markdown(f"<div class='kpi'>🏢<br>{prov.iloc[0,0]}</div>", unsafe_allow_html=True)
-    c3.markdown(f"<div class='kpi'>👥<br>{recv.iloc[0,0]}</div>", unsafe_allow_html=True)
+c1.markdown(f"<div class='kpi'>🍱<br>{len(df)}<br>Total Records</div>", unsafe_allow_html=True)
+c2.markdown(f"<div class='kpi'>🏙️<br>{df['city'].nunique()}<br>Cities</div>", unsafe_allow_html=True)
+c3.markdown(f"<div class='kpi'>🍴<br>{df['food_type'].nunique()}<br>Food Types</div>", unsafe_allow_html=True)
 
-    st.subheader("📈 Charts")
+# ---------------- OVERVIEW ----------------
+st.info("AI-powered dashboard to reduce food waste with real-time filtering & analytics")
 
-    df1 = safe_query("SELECT city, COUNT(*) AS total FROM providers GROUP BY city")
-    if not df1.empty:
-        st.plotly_chart(px.bar(df1, x="city", y="total"))
+# ---------------- CHARTS ----------------
+st.subheader("📈 Analytics")
 
-    df2 = safe_query("SELECT food_type, COUNT(*) AS total FROM food_listings GROUP BY food_type")
-    if not df2.empty:
-        st.plotly_chart(px.pie(df2, names="food_type", values="total"))
+col1,col2 = st.columns(2)
 
-    df3 = safe_query("SELECT meal_type, COUNT(*) AS total FROM food_listings GROUP BY meal_type")
-    if not df3.empty:
-        st.plotly_chart(px.pie(df3, names="meal_type", values="total"))
+with col1:
+    st.plotly_chart(px.bar(df.groupby("city").size().reset_index(name="count"), x="city", y="count", title="City Distribution"))
+    st.plotly_chart(px.pie(df, names="food_type", title="Food Type"))
+    st.plotly_chart(px.histogram(df, x="quantity", title="Quantity Distribution"))
 
-# ---------------- ML ----------------
-elif menu == "ML":
-
-    st.title("🤖 Prediction")
-
-    df = safe_query("SELECT quantity, food_type, city FROM food_listings")
-
-    if not df.empty:
-        df = pd.get_dummies(df)
-
-        X = df.drop("quantity", axis=1)
-        y = df["quantity"]
-
-        model = LinearRegression()
-        model.fit(X, y)
-
-        food = st.selectbox("Food", [c for c in X.columns if "food_type" in c])
-        city = st.selectbox("City", [c for c in X.columns if "city" in c])
-
-        if st.button("Predict"):
-            inp = pd.DataFrame([0]*len(X.columns)).T
-            inp.columns = X.columns
-            inp[food] = 1
-            inp[city] = 1
-            st.success(f"Prediction: {round(model.predict(inp)[0],2)}")
-
-# ---------------- ADMIN ----------------
-elif menu == "Admin":
-
-    st.title("Admin Panel")
-
-    if st.button("Delete Expired Food"):
-        conn.execute("DELETE FROM food_listings WHERE expiry_date < DATE('now')")
-        conn.commit()
-        st.success("Deleted")
+with col2:
+    st.plotly_chart(px.line(df.groupby("city")["quantity"].mean().reset_index(), x="city", y="quantity", title="Avg Quantity"))
+    st.plotly_chart(px.bar(df.groupby("meal_type").size().reset_index(name="count"), x="meal_type", y="count", title="Meal Type"))
+    st.plotly_chart(px.bar(df.groupby("status").size().reset_index(name="count"), x="status", y="count", title="Status"))
 
 # ---------------- LOGOUT ----------------
 if st.sidebar.button("Logout"):
-    st.session_state.login = False
+    st.session_state.login=False
     st.rerun()
