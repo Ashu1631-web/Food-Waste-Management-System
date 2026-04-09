@@ -1,153 +1,258 @@
 import streamlit as st
-import pandas as pd
 import sqlite3
-import matplotlib.pyplot as plt
+import pandas as pd
+import plotly.express as px
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
 
-from database import create_tables, load_csv_data
-from queries import queries
+# ---------------------------
+# DATABASE CONNECTION
+# ---------------------------
+conn = sqlite3.connect("food_waste.db", check_same_thread=False)
 
-# ---------------- CONFIG ----------------
-st.set_page_config(page_title="Food Waste Management", layout="wide")
+# ---------------------------
+# PAGE CONFIG
+# ---------------------------
+st.set_page_config(page_title="Food Waste Management System", layout="wide")
 
-DB_NAME = "food_waste.db"
+# ---------------------------
+# LOGIN FUNCTION (SECURE)
+# ---------------------------
+def login(username, password):
+    query = "SELECT * FROM users WHERE username=? AND password=?"
+    return conn.execute(query, (username, password)).fetchone()
 
-# Reload Database
-create_tables()
-load_csv_data()
+# ---------------------------
+# SESSION STATE
+# ---------------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.role = None
+    st.session_state.username = None
 
+# ---------------------------
+# LOGIN UI
+# ---------------------------
+if not st.session_state.logged_in:
+    st.title("🔐 Login System")
 
-def get_conn():
-    return sqlite3.connect(DB_NAME)
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
 
+    if st.button("Login"):
+        user = login(username, password)
+        if user:
+            st.session_state.logged_in = True
+            st.session_state.role = user[3]
+            st.session_state.username = username
+            st.success(f"Welcome {username} ({user[3]})")
+            st.rerun()
+        else:
+            st.error("Invalid Credentials")
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.title("🍲 Food Wastage System")
+    st.stop()
 
-menu = st.sidebar.radio(
-    "Navigation",
-    ["Dashboard (15 Graphs)", "Food Listings", "SQL Queries (15 Questions)"]
-)
+# ---------------------------
+# SIDEBAR
+# ---------------------------
+st.sidebar.title("📌 Navigation")
 
-# ======================================================
-# 📊 DASHBOARD WITH 15 GRAPHS
-# ======================================================
-if menu == "Dashboard (15 Graphs)":
+if st.session_state.role == "admin":
+    st.sidebar.success("Admin Access")
+else:
+    st.sidebar.info("User Access")
 
-    st.title("📊 Food Wastage Dashboard (15 Graphs)")
+menu = st.sidebar.radio("Go to", ["Dashboard", "ML Prediction", "Admin Panel"])
 
-    conn = get_conn()
+# ---------------------------
+# COMMON FUNCTION
+# ---------------------------
+def run_query(query):
+    return pd.read_sql(query, conn)
 
-    food_df = pd.read_sql("SELECT * FROM food_listings", conn)
-    claims_df = pd.read_sql("SELECT * FROM claims", conn)
-    providers_df = pd.read_sql("SELECT * FROM providers", conn)
-    receivers_df = pd.read_sql("SELECT * FROM receivers", conn)
+# =========================================================
+# 📊 DASHBOARD
+# =========================================================
+if menu == "Dashboard":
 
-    conn.close()
+    st.title("🍱 Food Waste Management Dashboard")
 
-    # Metrics
-    col1, col2, col3 = st.columns(3)
-    col1.metric("🍱 Total Food Items", len(food_df))
-    col2.metric("📌 Total Claims", len(claims_df))
-    col3.metric("🏢 Total Providers", len(providers_df))
+    # ---------------------------
+    # 15 SQL Queries
+    # ---------------------------
+    queries = {
+        "1. Total Food Items":
+        "SELECT COUNT(*) AS total_food FROM food_listings",
 
-    st.divider()
-    st.subheader("📍 Food & Claims Insights (15 Charts)")
+        "2. Providers by City":
+        "SELECT city, COUNT(*) as total FROM providers GROUP BY city",
 
-    # 1 Listings by City
-    st.write("### 1. Food Listings by City")
-    st.bar_chart(food_df["Location"].value_counts())
+        "3. Receivers by Type":
+        "SELECT type, COUNT(*) FROM receivers GROUP BY type",
 
-    # 2 Food Type
-    st.write("### 2. Food Type Distribution")
-    st.bar_chart(food_df["Food_Type"].value_counts())
+        "4. Food Status":
+        "SELECT status, COUNT(*) FROM food_listings GROUP BY status",
 
-    # 3 Meal Type
-    st.write("### 3. Meal Type Distribution")
-    st.bar_chart(food_df["Meal_Type"].value_counts())
+        "5. Top Providers":
+        """SELECT p.name, COUNT(*) as total 
+           FROM providers p 
+           JOIN food_listings f ON p.provider_id=f.provider_id
+           GROUP BY p.name ORDER BY total DESC LIMIT 5""",
 
-    # 4 Providers by City
-    st.write("### 4. Providers by City")
-    st.bar_chart(providers_df["City"].value_counts())
+        "6. Most Common Food Type":
+        "SELECT food_type, COUNT(*) as total FROM food_listings GROUP BY food_type ORDER BY total DESC",
 
-    # 5 Provider Type
-    st.write("### 5. Provider Type Contribution")
-    st.bar_chart(food_df["Provider_Type"].value_counts())
+        "7. Food by City":
+        "SELECT city, COUNT(*) as total FROM food_listings GROUP BY city",
 
-    # 6 Claims Status
-    st.write("### 6. Claims Status Breakdown")
-    st.bar_chart(claims_df["Status"].value_counts())
+        "8. Total Claims":
+        "SELECT COUNT(*) FROM claims",
 
-    # 7 Quantity Trend
-    st.write("### 7. Quantity Trend")
-    st.line_chart(food_df["Quantity"])
+        "9. Available Food":
+        "SELECT * FROM food_listings WHERE status='Available'",
 
-    # 8 Top Foods
-    st.write("### 8. Top 10 Food Items")
-    st.bar_chart(food_df["Food_Name"].value_counts().head(10))
+        "10. Providers without Donations":
+        """SELECT p.name FROM providers p 
+           LEFT JOIN food_listings f ON p.provider_id=f.provider_id
+           WHERE f.provider_id IS NULL""",
 
-    # 9 Claims by City
-    st.write("### 9. Claims by City")
-    merged = claims_df.merge(food_df, on="Food_ID")
-    st.bar_chart(merged["Location"].value_counts())
+        "11. Top Receivers":
+        """SELECT r.name, COUNT(*) as total 
+           FROM receivers r 
+           JOIN claims c ON r.receiver_id=c.receiver_id
+           GROUP BY r.name ORDER BY total DESC LIMIT 5""",
 
-    # 10 Expiry Trend
-    st.write("### 10. Expiry Month Trend")
-    food_df["Expiry_Date"] = pd.to_datetime(food_df["Expiry_Date"])
-    expiry = food_df.groupby(food_df["Expiry_Date"].dt.month).size()
-    st.line_chart(expiry)
+        "12. Avg Quantity":
+        "SELECT AVG(quantity) FROM food_listings",
 
-    # 11 Receivers by City
-    st.write("### 11. Receivers by City")
-    st.bar_chart(receivers_df["City"].value_counts())
+        "13. Expired Food":
+        "SELECT * FROM food_listings WHERE expiry_date < DATE('now')",
 
-    # 12 Top Receivers Claims
-    st.write("### 12. Top Receivers by Claims")
-    st.bar_chart(claims_df["Receiver_ID"].value_counts().head(10))
+        "14. Meal Type Distribution":
+        "SELECT meal_type, COUNT(*) FROM food_listings GROUP BY meal_type",
 
-    # 13 Top Providers Listings
-    st.write("### 13. Top Providers by Listings")
-    st.bar_chart(food_df["Provider_ID"].value_counts().head(10))
+        "15. Full Join Data":
+        """SELECT p.name as provider, r.name as receiver, f.food_name
+           FROM claims c
+           JOIN food_listings f ON c.food_id=f.food_id
+           JOIN providers p ON f.provider_id=p.provider_id
+           JOIN receivers r ON c.receiver_id=r.receiver_id"""
+    }
 
-    # 14 Pie Chart Claims Status
-    st.write("### 14. Claims Status Pie Chart")
-    status = claims_df["Status"].value_counts()
-    fig, ax = plt.subplots()
-    ax.pie(status, labels=status.index, autopct="%1.1f%%")
-    st.pyplot(fig)
+    selected_query = st.selectbox("📊 Select SQL Query", list(queries.keys()))
+    df = run_query(queries[selected_query])
+    st.dataframe(df, use_container_width=True)
 
-    # 15 Quantity Donated by City
-    st.write("### 15. Total Quantity Donated by City")
-    qty_city = food_df.groupby("Location")["Quantity"].sum()
-    st.bar_chart(qty_city)
+    # ---------------------------
+    # CHARTS (12)
+    # ---------------------------
+    st.markdown("## 📈 Data Visualizations")
 
-    st.success("✅ Dashboard with 15 Graphs Completed!")
+    df1 = run_query("SELECT city, COUNT(*) as total FROM providers GROUP BY city")
+    st.plotly_chart(px.bar(df1, x="city", y="total", title="Providers by City"))
 
-# ======================================================
-# FOOD LISTINGS PAGE
-# ======================================================
-elif menu == "Food Listings":
-    st.title("🍲 Food Listings Table")
+    df2 = run_query("SELECT type, COUNT(*) as total FROM receivers GROUP BY type")
+    st.plotly_chart(px.pie(df2, names="type", values="total", title="Receivers Distribution"))
 
-    conn = get_conn()
-    df = pd.read_sql("SELECT * FROM food_listings", conn)
-    conn.close()
+    df3 = run_query("SELECT food_type, COUNT(*) as total FROM food_listings GROUP BY food_type")
+    st.plotly_chart(px.bar(df3, x="food_type", y="total", title="Food Type"))
 
-    st.dataframe(df)
+    df4 = run_query("SELECT meal_type, COUNT(*) as total FROM food_listings GROUP BY meal_type")
+    st.plotly_chart(px.pie(df4, names="meal_type", values="total", title="Meal Type"))
 
-# ======================================================
-# SQL QUERIES (15 QUESTIONS)
-# ======================================================
-elif menu == "SQL Queries (15 Questions)":
+    df5 = run_query("SELECT status, COUNT(*) as total FROM food_listings GROUP BY status")
+    st.plotly_chart(px.bar(df5, x="status", y="total", title="Food Status"))
 
-    st.title("📌 SQL Queries Output (15 Questions)")
+    df6 = run_query("""
+    SELECT p.name, COUNT(*) as total 
+    FROM providers p JOIN food_listings f 
+    ON p.provider_id=f.provider_id 
+    GROUP BY p.name ORDER BY total DESC LIMIT 5
+    """)
+    st.plotly_chart(px.bar(df6, x="name", y="total", title="Top Providers"))
 
-    st.write("Select any query below to see output:")
+    df7 = run_query("""
+    SELECT r.name, COUNT(*) as total 
+    FROM receivers r JOIN claims c 
+    ON r.receiver_id=c.receiver_id 
+    GROUP BY r.name ORDER BY total DESC LIMIT 5
+    """)
+    st.plotly_chart(px.bar(df7, x="name", y="total", title="Top Receivers"))
 
-    selected_query = st.selectbox("Choose Query", list(queries.keys()))
+    df8 = run_query("SELECT COUNT(*) as total FROM claims")
+    st.metric("Total Claims", df8.iloc[0,0])
 
-    conn = get_conn()
-    result = pd.read_sql(queries[selected_query], conn)
-    conn.close()
+    df9 = run_query("SELECT COUNT(*) as total FROM food_listings WHERE expiry_date < DATE('now')")
+    st.metric("Expired Food Items", df9.iloc[0,0])
 
-    st.subheader("Query Result")
-    st.dataframe(result)
+    df10 = run_query("SELECT AVG(quantity) FROM food_listings")
+    st.metric("Avg Quantity", round(df10.iloc[0,0],2))
+
+    df11 = run_query("SELECT city, COUNT(*) as total FROM food_listings GROUP BY city")
+    st.plotly_chart(px.line(df11, x="city", y="total", title="Food by City"))
+
+    df12 = run_query("SELECT food_type, status, COUNT(*) as total FROM food_listings GROUP BY food_type, status")
+    st.plotly_chart(px.bar(df12, x="food_type", y="total", color="status", title="Food Type vs Status"))
+
+# =========================================================
+# 🤖 ML PREDICTION
+# =========================================================
+elif menu == "ML Prediction":
+
+    st.title("🤖 Food Demand Prediction")
+
+    df_ml = pd.read_sql("SELECT quantity, food_type, city FROM food_listings", conn)
+
+    df_ml = pd.get_dummies(df_ml, columns=["food_type", "city"])
+
+    X = df_ml.drop("quantity", axis=1)
+    y = df_ml["quantity"]
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+
+    food_cols = [col for col in X.columns if "food_type" in col]
+    city_cols = [col for col in X.columns if "city" in col]
+
+    selected_food = st.selectbox("Select Food Type", food_cols)
+    selected_city = st.selectbox("Select City", city_cols)
+
+    if st.button("Predict Demand"):
+        input_data = pd.DataFrame([0]*len(X.columns)).T
+        input_data.columns = X.columns
+
+        input_data[selected_food] = 1
+        input_data[selected_city] = 1
+
+        prediction = model.predict(input_data)[0]
+
+        st.success(f"Predicted Demand: {round(prediction,2)}")
+
+# =========================================================
+# 🛠 ADMIN PANEL
+# =========================================================
+elif menu == "Admin Panel":
+
+    if st.session_state.role != "admin":
+        st.error("Access Denied")
+        st.stop()
+
+    st.title("🛠 Admin Panel")
+
+    if st.button("Delete Expired Food"):
+        conn.execute("DELETE FROM food_listings WHERE expiry_date < DATE('now')")
+        conn.commit()
+        st.success("Expired food deleted")
+
+    if st.button("View Users"):
+        df_users = pd.read_sql("SELECT * FROM users", conn)
+        st.dataframe(df_users)
+
+# ---------------------------
+# LOGOUT
+# ---------------------------
+if st.sidebar.button("Logout"):
+    st.session_state.logged_in = False
+    st.rerun()
