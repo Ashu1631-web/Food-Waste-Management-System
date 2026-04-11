@@ -83,16 +83,31 @@ claims_df = pd.DataFrame({
 if menu == "Dashboard":
     st.title("📊 Dashboard")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Food", food_df["Quantity"].sum())
-    col2.metric("Cities", food_df["City"].nunique())
-    col3.metric("Records", len(food_df))
+    # PROJECT OVERVIEW
+    st.markdown("## 📌 Project Overview")
+    st.info("""
+    This project is a Food Waste Management System developed using Python, SQL, and Streamlit. 
+    It connects food providers with receivers to reduce food wastage. 
+    The system includes CRUD operations, SQL queries, and data analytics.
+    """)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.plotly_chart(px.bar(food_df, x="City", y="Quantity"), use_container_width=True)
-    with c2:
-        st.plotly_chart(px.pie(food_df, names="Food_Type"), use_container_width=True)
+    st.markdown("---")
+
+    # RECORD SUMMARY
+    st.markdown("## 📊 Records Summary")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric("Providers", len(providers_df))
+    col2.metric("Receivers", len(receivers_df))
+    col3.metric("Food Listings", len(food_df))
+    col4.metric("Claims", len(claims_df))
+
+    st.markdown("---")
+
+    # DATA PREVIEW
+    st.markdown("## 📋 Latest Data Preview")
+    st.dataframe(food_df, use_container_width=True)
 
 # ---------------- QUERIES ----------------
 elif menu == "Queries":
@@ -233,10 +248,10 @@ elif menu == "About":
     Food Waste Management System helps reduce food wastage by connecting providers and receivers.
 
     Features:
-    - Dashboard analytics
+    - Dashboard overview
     - SQL queries (30)
     - CRUD operations (4 tables)
-    - Data insights with filters & graphs
+    - Data analytics with filters & graphs
     """)
 
     st.image("https://images.unsplash.com/photo-1551288049-bebda4e38f71")
