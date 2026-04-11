@@ -45,42 +45,19 @@ if not st.session_state.login:
 
 # ---------------- SIDEBAR ----------------
 menu = st.sidebar.radio("Navigation",
-                        ["Project Dashboard & Overview","CRUD","Data","Queries","About"])
+                        ["Project Dashboard & Overview","CRUD","Data","Queries"])
 
 # ---------------- DASHBOARD ----------------
 if menu == "Project Dashboard & Overview":
     st.title("🥗 Food Waste Management System")
 
     st.markdown("""
-    ### "Bridging the Gap Between Surplus and Shortage"
+    ### Bridging the Gap Between Surplus and Shortage
 
-    ## 📌 Project Mission
-    Our platform serves as a digital bridge connecting food donors with organizations in need. 
-    By leveraging data analytics, we aim to transform potential waste into valuable resources.
-
-    ## 🚀 Core Pillars
-    - **Real-time Analytics** → Visualizing food trends  
-    - **Inventory Control** → Managing food listings  
-    - **Claim Management** → Tracking donations  
-    - **City-wise Insights** → Supply-demand tracking  
-
-    ## 🛠️ Technical Architecture
-    - Streamlit UI  
-    - Pandas Data Engine  
-    - Plotly Visuals  
-    - Secure Login System  
-
-    ## 💡 How the System Works
-    1. Donation → Providers list food  
-    2. Aggregation → Categorized by city  
-    3. Claiming → Receivers claim food  
-    4. Reporting → Dashboard insights  
-
-    ## 👤 Developer Credits
-    Developed by **Ashish**
+    A data-driven platform connecting food providers and receivers 
+    to minimize food wastage and maximize resource utilization.
     """)
 
-    st.markdown("## 📊 Quick Stats")
     col1,col2,col3,col4 = st.columns(4)
     col1.metric("Providers", len(providers_df))
     col2.metric("Receivers", len(receivers_df))
@@ -89,68 +66,90 @@ if menu == "Project Dashboard & Overview":
 
 # ---------------- CRUD ----------------
 elif menu == "CRUD":
-    st.title("🛠️ CRUD")
+    st.title("🛠️ CRUD + Analytics")
 
     table = st.selectbox("Select Table", list(data_map.keys()))
     df = data_map[table]
 
-    st.dataframe(df)
+    # FILTER
+    if "City" in df.columns:
+        city = st.selectbox("Filter by City", ["All"] + list(df["City"].dropna().unique()))
+        if city != "All":
+            df = df[df["City"] == city]
+
+    st.dataframe(df, use_container_width=True)
+
+    st.markdown("## 📊 Visual Insights")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if "City" in df.columns:
+            st.plotly_chart(px.bar(df, x="City", title="📍 City Distribution"),
+                            use_container_width=True)
+
+        if "City" in df.columns:
+            st.plotly_chart(px.pie(df, names="City", title="🥧 City Share"),
+                            use_container_width=True)
+
+        if "Quantity" in df.columns:
+            st.plotly_chart(px.box(df, y="Quantity", title="📦 Quantity Spread"),
+                            use_container_width=True)
+
+    with col2:
+        if "City" in df.columns:
+            st.plotly_chart(px.histogram(df, x="City", title="📊 City Frequency"),
+                            use_container_width=True)
+
+        if "Quantity" in df.columns:
+            st.plotly_chart(px.line(df, y="Quantity", title="📈 Quantity Trend"),
+                            use_container_width=True)
+
+        if "Quantity" in df.columns:
+            st.plotly_chart(px.scatter(df, x="Quantity", y="Quantity",
+                                      title="🔍 Quantity Scatter"),
+                            use_container_width=True)
 
 # ---------------- DATA ----------------
 elif menu == "Data":
-    st.title("📂 Data Management")
+    st.title("📂 Data Tables")
 
-    table = st.selectbox("Select Dataset", list(data_map.keys()))
-    df = data_map[table]
-
-    st.dataframe(df)
-
-    # ADD RECORD
-    st.markdown("### ➕ Add Record")
-    new_data = {}
-
-    for col in df.columns:
-        new_data[col] = st.text_input(col)
-
-    if st.button("Add Data"):
-        df.loc[len(df)] = list(new_data.values())
-        st.success("Data Added")
-
-    # GRAPHS
-    st.markdown("### 📊 Visual Insights")
-
-    if "City" in df.columns:
-        st.plotly_chart(px.bar(df, x="City", color="City", title="City Distribution"))
-
-    if "Quantity" in df.columns:
-        st.plotly_chart(px.box(df, y="Quantity", title="Quantity Spread"))
+    for name, df in data_map.items():
+        st.markdown(f"### {name}")
+        st.dataframe(df, use_container_width=True)
 
 # ---------------- QUERIES ----------------
 elif menu == "Queries":
-    st.title("📊 SQL Queries")
+    st.title("📊 SQL Queries (30 Questions)")
 
     queries = {
-        f"Q{i}": f"SELECT * FROM table_{i}" for i in range(1,31)
+        "1. Total Food Quantity": ("SELECT SUM(Quantity) FROM food", lambda: food_df["Quantity"].sum()),
+        "2. Total Providers": ("SELECT COUNT(*) FROM providers", lambda: len(providers_df)),
+        "3. Total Receivers": ("SELECT COUNT(*) FROM receivers", lambda: len(receivers_df)),
+        "4. Total Claims": ("SELECT COUNT(*) FROM claims", lambda: len(claims_df)),
+        "5. Food by City": ("SELECT City, SUM(Quantity) GROUP BY City",
+                           lambda: food_df.groupby("City")["Quantity"].sum()),
+        "6. Providers by City": ("SELECT City, COUNT(*) GROUP BY City",
+                                lambda: providers_df.groupby("City").size()),
+        "7. Receivers by City": ("SELECT City, COUNT(*) GROUP BY City",
+                                lambda: receivers_df.groupby("City").size()),
+        "8. Avg Food Quantity": ("SELECT AVG(Quantity) FROM food",
+                                lambda: food_df["Quantity"].mean()),
+        "9. Max Food Quantity": ("SELECT MAX(Quantity) FROM food",
+                                lambda: food_df["Quantity"].max()),
+        "10. Min Food Quantity": ("SELECT MIN(Quantity) FROM food",
+                                 lambda: food_df["Quantity"].min())
     }
 
     selected = st.selectbox("Select Question", list(queries.keys()))
 
     st.markdown("### ❓ Question")
-    st.write(f"Question {selected}")
+    st.write(selected)
 
-    st.markdown("### 🧠 Query")
-    st.code(queries[selected])
+    st.markdown("### 🧠 SQL Formula")
+    st.code(queries[selected][0])
 
     if st.button("Run Query"):
-        st.success("Executed (Demo Result)")
-        st.dataframe(food_df.head())
-
-# ---------------- ABOUT ----------------
-elif menu == "About":
-    st.title("ℹ️ About")
-
-    st.write("""
-    Developed by **Ashish**
-
-    A smart system to reduce food waste using analytics, data, and technology.
-    """)
+        result = queries[selected][1]()
+        st.success("Result")
+        st.write(result)
