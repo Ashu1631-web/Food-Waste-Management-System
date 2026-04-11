@@ -30,11 +30,6 @@ def get_col(df, names):
             return col
     return None
 
-city_f = get_col(food_df, ["city", "location"])
-qty = get_col(food_df, ["quantity"])
-city_p = get_col(providers_df, ["city"])
-city_r = get_col(receivers_df, ["city"])
-
 # ---------------- LOGIN ----------------
 if "login" not in st.session_state:
     st.session_state.login = False
@@ -72,20 +67,7 @@ if menu == "Project Dashboard & Overview":
     st.markdown("""
 ## 🌍 Bridging the Gap Between Surplus and Shortage
 
-### 📌 Mission
-Connect food donors with people in need using data.
-
-### 🌟 Vision
-Zero-Waste ecosystem powered by analytics.
-
-### 🚀 Core Features
-- Dashboard Analytics  
-- CRUD Operations  
-- SQL Insights  
-- Smart Filtering  
-
-### 👨‍💻 Developer
-Ashish
+A smart platform connecting providers & receivers using analytics.
 """)
 
     col1,col2,col3,col4 = st.columns(4)
@@ -101,7 +83,7 @@ elif menu == "CRUD":
     table = st.selectbox("Select Table", list(data_map.keys()))
     df = data_map[table]
 
-    # FILTER TYPE
+    # -------- FILTER BY TYPE --------
     type_col = None
     for col in df.columns:
         if col.lower() in ["type", "food_type", "meal_type"]:
@@ -115,67 +97,75 @@ elif menu == "CRUD":
 
     st.dataframe(df, use_container_width=True)
 
-    # ADD
+    # -------- SAFE GRAPHS --------
+    st.markdown("## 📊 Visual Insights")
+
+    city_col = get_col(df, ["city", "location"])
+    qty_col = get_col(df, ["quantity"])
+
+    try:
+        if city_col:
+            st.plotly_chart(px.bar(df, x=city_col, title="City Distribution"), use_container_width=True)
+            st.plotly_chart(px.pie(df, names=city_col, title="City Share"), use_container_width=True)
+            st.plotly_chart(px.histogram(df, x=city_col, title="City Frequency"), use_container_width=True)
+
+        if qty_col:
+            st.plotly_chart(px.box(df, y=qty_col, title="Quantity Spread"), use_container_width=True)
+            st.plotly_chart(px.line(df, y=qty_col, title="Quantity Trend"), use_container_width=True)
+            st.plotly_chart(px.scatter(df, x=qty_col, y=qty_col, title="Quantity Scatter"), use_container_width=True)
+
+    except Exception as e:
+        st.warning("Graphs not available for this dataset")
+
+# ---------------- DATA ----------------
+elif menu == "Data":
+    st.title("📂 Data Management")
+
+    table = st.selectbox("Select Dataset", list(data_map.keys()))
+    df = data_map[table]
+
+    st.dataframe(df, use_container_width=True)
+
+    # -------- ADD RECORD --------
     st.markdown("## ➕ Add Record")
+
     new_data = {}
     for col in df.columns:
         new_data[col] = st.text_input(col)
 
     if st.button("Add Record"):
         df.loc[len(df)] = list(new_data.values())
-        st.success("Added")
+        st.success("Record Added")
 
-    # DELETE
+    # -------- DELETE RECORD --------
     st.markdown("## ❌ Delete Record")
+
     id_col = df.columns[0]
     delete_id = st.selectbox("Select ID", df[id_col])
 
-    if st.button("Delete"):
+    if st.button("Delete Record"):
         df = df[df[id_col] != delete_id]
-        st.success("Deleted")
-
-    # GRAPHS
-    st.markdown("## 📊 Insights")
-    if city_f and qty:
-        st.plotly_chart(px.bar(df, x=city_f, title="City Distribution"))
-        st.plotly_chart(px.pie(df, names=city_f, title="City Share"))
-        st.plotly_chart(px.histogram(df, x=city_f, title="City Frequency"))
-        st.plotly_chart(px.box(df, y=qty, title="Quantity Spread"))
-        st.plotly_chart(px.line(df, y=qty, title="Trend"))
-        st.plotly_chart(px.scatter(df, x=qty, y=qty, title="Scatter"))
-
-# ---------------- DATA ----------------
-elif menu == "Data":
-    st.title("📂 Data Tables")
-
-    for name, df in data_map.items():
-        st.markdown(f"### {name}")
-        st.dataframe(df)
+        st.success("Record Deleted")
 
 # ---------------- SQL ----------------
 elif menu == "Queries":
     st.title("📊 SQL Queries")
 
+    city_f = get_col(food_df, ["city", "location"])
+    qty = get_col(food_df, ["quantity"])
+
     queries = {
         "Total Quantity":
             ("SELECT SUM(Quantity) FROM food_listings;",
-             lambda: food_df[qty].sum()),
+             lambda: food_df[qty].sum() if qty else "Missing Column"),
 
         "Food by City":
             ("SELECT City, SUM(Quantity) FROM food_listings GROUP BY City;",
-             lambda: food_df.groupby(city_f)[qty].sum()),
+             lambda: food_df.groupby(city_f)[qty].sum() if city_f and qty else "Missing Column"),
 
         "Providers Count":
             ("SELECT COUNT(*) FROM providers;",
-             lambda: len(providers_df)),
-
-        "Receivers Count":
-            ("SELECT COUNT(*) FROM receivers;",
-             lambda: len(receivers_df)),
-
-        "Join Example":
-            ("SELECT * FROM providers JOIN receivers ON City;",
-             lambda: pd.merge(providers_df, receivers_df, on=city_p))
+             lambda: len(providers_df))
     }
 
     q = st.selectbox("Select Question", list(queries.keys()))
