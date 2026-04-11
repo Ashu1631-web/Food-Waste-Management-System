@@ -16,7 +16,6 @@ def login_bg():
     .stApp {
         background-image: url("https://images.unsplash.com/photo-1504674900247-0877df9cc836");
         background-size: cover;
-        background-position: center;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -54,7 +53,7 @@ menu = st.sidebar.radio("Go to", [
     "Dashboard", "Queries", "CRUD", "Data", "About"
 ])
 
-# ---------------- SAMPLE DATA ----------------
+# ---------------- DATA ----------------
 providers_df = pd.DataFrame({
     "Provider_ID": [1,2,3],
     "Name": ["A Shop","B Store","C Mart"],
@@ -100,7 +99,8 @@ elif menu == "Queries":
     st.title("📊 Database Queries")
 
     queries = {f"Q{i}": f"SELECT * FROM table_{i};" for i in range(1, 31)}
-    selected = st.selectbox("Select Query", list(queries.keys()))
+
+    selected = st.selectbox("Select Query", list(queries.keys()), key="query_select")
 
     st.markdown("""
     <style>
@@ -116,15 +116,17 @@ elif menu == "Queries":
 
     st.markdown(f"<div class='sql-box'>{queries[selected]}</div>", unsafe_allow_html=True)
 
-    if st.button("Run Query"):
+    if st.button("Run Query", key="run_query"):
         st.success("Executed ✅")
-        st.dataframe(food_df)
+        st.dataframe(food_df, use_container_width=True)
 
 # ---------------- CRUD ----------------
 elif menu == "CRUD":
     st.title("🛠️ CRUD Management")
 
-    table = st.selectbox("Select Table", ["Providers","Receivers","Food Listings","Claims"])
+    table = st.selectbox("Select Table",
+                         ["Providers","Receivers","Food Listings","Claims"],
+                         key="crud_table")
 
     data_map = {
         "Providers": providers_df,
@@ -139,33 +141,36 @@ elif menu == "CRUD":
 
     # ADD
     with st.expander("➕ Add Record"):
-        cols = st.columns(2)
         values = []
+        cols = st.columns(2)
         for i, col in enumerate(df_selected.columns):
             with cols[i % 2]:
-                values.append(st.text_input(col))
+                values.append(st.text_input(col, key=f"add_{col}_{table}"))
 
-        if st.button("Add"):
+        if st.button("Add", key=f"add_btn_{table}"):
             df_selected.loc[len(df_selected)] = values
             st.success("Added")
 
     # UPDATE
     with st.expander("✏️ Update Record"):
-        idx = st.selectbox("Select Row", df_selected.index)
+        idx = st.selectbox("Select Row", df_selected.index, key=f"update_idx_{table}")
 
         new_vals = []
         for col in df_selected.columns:
-            new_vals.append(st.text_input(col, str(df_selected.loc[idx, col])))
+            new_vals.append(
+                st.text_input(col, str(df_selected.loc[idx, col]),
+                              key=f"update_{col}_{table}")
+            )
 
-        if st.button("Update"):
+        if st.button("Update", key=f"update_btn_{table}"):
             df_selected.loc[idx] = new_vals
             st.success("Updated")
 
     # DELETE
     with st.expander("🗑️ Delete Record"):
-        idx = st.selectbox("Delete Row", df_selected.index)
+        idx = st.selectbox("Delete Row", df_selected.index, key=f"delete_idx_{table}")
 
-        if st.button("Delete"):
+        if st.button("Delete", key=f"delete_btn_{table}"):
             df_selected.drop(idx, inplace=True)
             st.warning("Deleted")
 
@@ -174,25 +179,46 @@ elif menu == "Data":
     st.title("📂 Raw Data & Analytics")
 
     def section(title, df, col):
+
         with st.expander(title):
 
-            val = st.selectbox(f"{title} Filter", ["All"] + list(df[col].unique()))
+            val = st.selectbox(
+                f"{title} Filter",
+                ["All"] + list(df[col].unique()),
+                key=f"{title}_filter"
+            )
+
             temp = df if val == "All" else df[df[col] == val]
 
-            st.dataframe(temp)
+            st.dataframe(temp, use_container_width=True)
 
-            st.download_button("Download", temp.to_csv().encode(), f"{title}.csv")
+            st.download_button(
+                "Download",
+                temp.to_csv(index=False).encode(),
+                f"{title}.csv",
+                key=f"{title}_download"
+            )
 
             c1, c2 = st.columns(2)
 
             with c1:
-                st.plotly_chart(px.bar(temp, x=col), use_container_width=True)
-                st.plotly_chart(px.histogram(temp, x=col), use_container_width=True)
+                st.plotly_chart(px.bar(temp, x=col),
+                                use_container_width=True,
+                                key=f"{title}_bar")
+
+                st.plotly_chart(px.histogram(temp, x=col),
+                                use_container_width=True,
+                                key=f"{title}_hist")
 
             with c2:
-                st.plotly_chart(px.pie(temp, names=col), use_container_width=True)
+                st.plotly_chart(px.pie(temp, names=col),
+                                use_container_width=True,
+                                key=f"{title}_pie")
+
                 if "Quantity" in temp.columns:
-                    st.plotly_chart(px.box(temp, y="Quantity"), use_container_width=True)
+                    st.plotly_chart(px.box(temp, y="Quantity"),
+                                    use_container_width=True,
+                                    key=f"{title}_box")
 
     section("Providers", providers_df, "City")
     section("Receivers", receivers_df, "City")
@@ -205,7 +231,12 @@ elif menu == "About":
 
     st.write("""
     Food Waste Management System helps reduce food wastage by connecting providers and receivers.
-    Includes dashboard analytics, SQL queries, CRUD operations and data insights.
+
+    Features:
+    - Dashboard analytics
+    - SQL queries (30)
+    - CRUD operations (4 tables)
+    - Data insights with filters & graphs
     """)
 
     st.image("https://images.unsplash.com/photo-1551288049-bebda4e38f71")
