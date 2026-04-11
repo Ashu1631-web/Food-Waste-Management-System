@@ -3,7 +3,6 @@ import sqlite3
 import pandas as pd
 import plotly.express as px
 
-# ---------------- CONFIG ----------------
 st.set_page_config(page_title="Food Waste System", layout="wide")
 
 # ---------------- DATABASE ----------------
@@ -28,28 +27,51 @@ def delete(table, id):
     cursor.execute(f"DELETE FROM {table} WHERE id=?", (id,))
     conn.commit()
 
-# ---------------- UI STYLE ----------------
-st.markdown("""
-<style>
-.card {
-    padding:20px;
-    border-radius:15px;
-    background: linear-gradient(135deg,#1b5e20,#2e7d32);
-    color:white;
-    text-align:center;
-}
-button {
-    border-radius:8px !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ---------------- LOGIN ----------------
+# ---------------- LOGIN STATE ----------------
 if "login" not in st.session_state:
     st.session_state.login = False
 
+# ---------------- LOGIN PAGE (NETFLIX STYLE) ----------------
 if not st.session_state.login:
-    st.markdown("## 🔐 Login")
+
+    st.markdown("""
+    <style>
+    .stApp {
+        background: url("https://images.unsplash.com/photo-1504674900247-0877df9cc836");
+        background-size: cover;
+    }
+
+    .overlay {
+        position: fixed;
+        top:0; left:0;
+        width:100%; height:100%;
+        background: rgba(0,0,0,0.75);
+    }
+
+    .login-box {
+        position: absolute;
+        top:50%; left:50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.85);
+        padding:40px;
+        border-radius:15px;
+        width:350px;
+        text-align:center;
+        color:white;
+    }
+
+    input {
+        border-radius:8px !important;
+    }
+    </style>
+
+    <div class="overlay"></div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="login-box">', unsafe_allow_html=True)
+
+    st.markdown("## 🍔 Food Waste System")
+    st.markdown("### 🔐 Login")
 
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
@@ -61,7 +83,25 @@ if not st.session_state.login:
         else:
             st.error("Invalid Credentials")
 
+    st.markdown("</div>", unsafe_allow_html=True)
+
     st.stop()
+
+# ---------------- CLEAN UI AFTER LOGIN ----------------
+st.markdown("""
+<style>
+.stApp {
+    background-color:#0E1117;
+}
+.card {
+    padding:20px;
+    border-radius:15px;
+    background: linear-gradient(135deg,#1b5e20,#2e7d32);
+    color:white;
+    text-align:center;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ---------------- SIDEBAR ----------------
 menu = st.sidebar.radio("Navigation",
@@ -77,64 +117,51 @@ if menu == "Dashboard":
     claims = fetch("claims")
 
     st.markdown("## 📌 Project Overview")
-    st.info("""
-    Food Waste Management System connects providers with receivers 
-    to reduce food wastage using data-driven insights.
-    """)
+    st.info("Food Waste Management System connects providers with receivers.")
 
     col1, col2, col3, col4 = st.columns(4)
 
     col1.markdown(f"<div class='card'>Providers<br><h2>{len(providers)}</h2></div>", unsafe_allow_html=True)
     col2.markdown(f"<div class='card'>Receivers<br><h2>{len(receivers)}</h2></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='card'>Food<br><h2>{len(food)}</h2></div>", unsafe_allow_html=True)
+    col3.markdown(f"<div class='card'>Food Listings<br><h2>{len(food)}</h2></div>", unsafe_allow_html=True)
     col4.markdown(f"<div class='card'>Claims<br><h2>{len(claims)}</h2></div>", unsafe_allow_html=True)
 
-    st.markdown("## 📋 Latest Food Data")
+    st.markdown("## 📋 Latest Data")
     st.dataframe(food, use_container_width=True)
 
 # ---------------- CRUD ----------------
 elif menu == "CRUD":
-    st.title("🛠️ CRUD Operations")
+    st.title("🛠️ CRUD")
 
     table = st.selectbox("Select Table", ["providers","receivers","food","claims"])
-
     df = fetch(table)
-    st.dataframe(df, use_container_width=True)
 
-    # ADD
-    with st.expander("➕ Add Record"):
-        if table == "providers" or table == "receivers":
+    st.dataframe(df)
+
+    with st.expander("➕ Add"):
+        if table in ["providers","receivers"]:
             name = st.text_input("Name")
             city = st.text_input("City")
-
             if st.button("Add"):
-                insert(table, (name, city))
-                st.success("Added Successfully")
+                insert(table,(name,city))
 
         elif table == "food":
-            type_ = st.text_input("Food Type")
-            city = st.text_input("City")
-            qty = st.number_input("Quantity")
-
+            t = st.text_input("Type")
+            c = st.text_input("City")
+            q = st.number_input("Quantity")
             if st.button("Add"):
-                insert(table, (type_, city, qty))
-                st.success("Added Successfully")
+                insert(table,(t,c,q))
 
         elif table == "claims":
-            city = st.text_input("City")
-            status = st.selectbox("Status", ["Pending","Completed"])
-
+            c = st.text_input("City")
+            s = st.selectbox("Status",["Pending","Completed"])
             if st.button("Add"):
-                insert(table, (city, status))
-                st.success("Added Successfully")
+                insert(table,(c,s))
 
-    # DELETE
-    with st.expander("🗑️ Delete Record"):
-        id = st.number_input("Enter ID", step=1)
-
+    with st.expander("🗑️ Delete"):
+        id = st.number_input("ID", step=1)
         if st.button("Delete"):
-            delete(table, id)
-            st.warning("Deleted Successfully")
+            delete(table,id)
 
 # ---------------- DATA ----------------
 elif menu == "Data":
@@ -149,25 +176,23 @@ elif menu == "Data":
                                ["All"] + list(df[col].dropna().unique()),
                                key=title)
 
-            temp = df if val == "All" else df[df[col] == val]
+            temp = df if val=="All" else df[df[col]==val]
 
             st.dataframe(temp)
 
-            st.download_button("Download CSV",
-                               temp.to_csv(index=False).encode(),
-                               f"{title}.csv")
+            st.download_button("Download", temp.to_csv(index=False).encode(), f"{title}.csv")
 
-            c1, c2 = st.columns(2)
+            c1,c2 = st.columns(2)
 
             with c1:
-                st.plotly_chart(px.bar(temp, x=col), key=f"{title}_bar")
-                st.plotly_chart(px.histogram(temp, x=col), key=f"{title}_hist")
+                st.plotly_chart(px.bar(temp,x=col), key=f"{title}_bar")
+                st.plotly_chart(px.histogram(temp,x=col), key=f"{title}_hist")
 
             with c2:
-                st.plotly_chart(px.pie(temp, names=col), key=f"{title}_pie")
+                st.plotly_chart(px.pie(temp,names=col), key=f"{title}_pie")
 
                 if "quantity" in temp.columns:
-                    st.plotly_chart(px.box(temp, y="quantity"), key=f"{title}_box")
+                    st.plotly_chart(px.box(temp,y="quantity"), key=f"{title}_box")
 
     section("Providers","providers","city")
     section("Receivers","receivers","city")
@@ -179,21 +204,11 @@ elif menu == "Queries":
     st.title("📊 SQL Queries")
 
     queries = [f"SELECT * FROM table_{i}" for i in range(1,31)]
-
-    q = st.selectbox("Select Query", queries)
-
+    q = st.selectbox("Query", queries)
     st.code(q)
 
 # ---------------- ABOUT ----------------
 elif menu == "About":
     st.title("ℹ️ About")
 
-    st.write("""
-    This is an advanced Food Waste Management System built using Python, SQLite, and Streamlit.
-    
-    Features:
-    - Persistent Database
-    - CRUD Operations
-    - Data Analytics Dashboard
-    - SQL Query Interface
-    """)
+    st.write("Advanced Food Waste Management System with premium UI & database.")
