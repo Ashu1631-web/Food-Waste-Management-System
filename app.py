@@ -9,13 +9,13 @@ st.set_page_config(page_title="Food Waste System", layout="wide")
 conn = sqlite3.connect("database.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# CREATE TABLES
 cursor.execute("CREATE TABLE IF NOT EXISTS providers (id INTEGER PRIMARY KEY, name TEXT, city TEXT)")
 cursor.execute("CREATE TABLE IF NOT EXISTS receivers (id INTEGER PRIMARY KEY, name TEXT, city TEXT)")
 cursor.execute("CREATE TABLE IF NOT EXISTS food (id INTEGER PRIMARY KEY, type TEXT, city TEXT, quantity INTEGER)")
 cursor.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY, city TEXT, status TEXT)")
+conn.commit()
 
-# ---------------- INSERT SAMPLE DATA ----------------
+# ---------------- SAMPLE DATA ----------------
 def insert_sample():
     if pd.read_sql("SELECT * FROM providers", conn).empty:
         cursor.execute("INSERT INTO providers (name,city) VALUES ('Restaurant A','Delhi')")
@@ -37,128 +37,122 @@ def insert_sample():
 
 insert_sample()
 
-# ---------------- FUNCTIONS ----------------
 def fetch(table):
     return pd.read_sql(f"SELECT * FROM {table}", conn)
-
-def insert(table, values):
-    cursor.execute(f"INSERT INTO {table} VALUES (NULL,{','.join(['?']*len(values))})", values)
-    conn.commit()
-
-def delete(table, id):
-    cursor.execute(f"DELETE FROM {table} WHERE id=?", (id,))
-    conn.commit()
 
 # ---------------- LOGIN ----------------
 if "login" not in st.session_state:
     st.session_state.login = False
 
 if not st.session_state.login:
+
     st.markdown("""
     <style>
     .stApp {
-        background:url("https://images.unsplash.com/photo-1504674900247-0877df9cc836");
-        background-size:cover;
+        background: url("https://images.unsplash.com/photo-1504674900247-0877df9cc836");
+        background-size: cover;
     }
+
     .overlay {
-        position:fixed;
-        width:100%;
-        height:100%;
-        background:rgba(0,0,0,0.6);
+        position: fixed;
+        top:0; left:0;
+        width:100%; height:100%;
+        backdrop-filter: blur(8px);
+        background: rgba(0,0,0,0.6);
     }
+
+    .login-card {
+        position: absolute;
+        top:50%; left:50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255,255,255,0.08);
+        padding: 40px;
+        border-radius: 15px;
+        backdrop-filter: blur(15px);
+        width: 350px;
+    }
+
     </style>
+
     <div class="overlay"></div>
     """, unsafe_allow_html=True)
 
-    st.title("🍔 Login")
+    st.markdown("<div class='login-card'>", unsafe_allow_html=True)
+    st.markdown("## 🍔 Login")
 
-    u = st.text_input("Username")
-    p = st.text_input("Password", type="password")
+    user = st.text_input("Username")
+    pwd = st.text_input("Password", type="password")
 
     if st.button("Login"):
-        if u=="admin" and p=="1234":
-            st.session_state.login=True
+        if user == "admin" and pwd == "1234":
+            st.session_state.login = True
             st.rerun()
+        else:
+            st.error("Invalid Credentials")
 
+    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# ---------------- SIDEBAR ----------------
+# ---------------- MAIN UI ----------------
+st.markdown("""
+<style>
+.stApp {background-color:#0E1117;}
+.card {
+    padding:20px;
+    border-radius:15px;
+    background: linear-gradient(135deg,#00c853,#64dd17);
+    color:white;
+    text-align:center;
+}
+</style>
+""", unsafe_allow_html=True)
+
 menu = st.sidebar.radio("Navigation", ["Dashboard","CRUD","Data","Queries","About"])
 
 # ---------------- DASHBOARD ----------------
-if menu=="Dashboard":
+if menu == "Dashboard":
     st.title("📊 Dashboard")
-
-    st.markdown("## 📌 Project Overview")
-    st.info("""
-    Food Waste Management System connects providers and receivers to reduce food wastage 
-    using data-driven insights and efficient distribution.
-    """)
 
     p = fetch("providers")
     r = fetch("receivers")
     f = fetch("food")
     c = fetch("claims")
 
-    col1,col2,col3,col4 = st.columns(4)
-    col1.metric("Providers",len(p))
-    col2.metric("Receivers",len(r))
-    col3.metric("Food Listings",len(f))
-    col4.metric("Claims",len(c))
+    st.markdown("## 📌 Project Overview")
+    st.info("Food Waste Management System reduces food wastage using smart analytics.")
 
-    st.markdown("## 📋 Food Data")
-    st.dataframe(f)
+    col1,col2,col3,col4 = st.columns(4)
+    col1.markdown(f"<div class='card'>👨‍🍳 Providers<br><h2>{len(p)}</h2></div>", unsafe_allow_html=True)
+    col2.markdown(f"<div class='card'>🤝 Receivers<br><h2>{len(r)}</h2></div>", unsafe_allow_html=True)
+    col3.markdown(f"<div class='card'>🍱 Food<br><h2>{len(f)}</h2></div>", unsafe_allow_html=True)
+    col4.markdown(f"<div class='card'>📦 Claims<br><h2>{len(c)}</h2></div>", unsafe_allow_html=True)
 
 # ---------------- CRUD ----------------
-elif menu=="CRUD":
-    st.title("🛠️ CRUD")
+elif menu == "CRUD":
+    st.title("🛠️ CRUD + Analytics")
 
-    table = st.selectbox("Select Table",["providers","receivers","food","claims"])
+    table = st.selectbox("Select Table", ["providers","receivers","food","claims"])
     df = fetch(table)
 
     if "city" in df.columns:
-        city = st.selectbox("Filter City",["All"]+list(df["city"].unique()))
-        if city!="All":
-            df = df[df["city"]==city]
+        city = st.selectbox("Filter City", ["All"] + list(df["city"].unique()))
+        if city != "All":
+            df = df[df["city"] == city]
 
     st.dataframe(df)
 
-    st.markdown("### 📊 Graphs")
+    st.markdown("### 📊 Visual Insights")
+
     if "city" in df.columns:
-        st.plotly_chart(px.bar(df,x="city",title="City Distribution"))
+        st.plotly_chart(px.bar(df, x="city", color="city",
+                                      title="🏙️ City Distribution"))
 
     if "quantity" in df.columns:
-        st.plotly_chart(px.box(df,y="quantity",title="Quantity Spread"))
-
-    # ADD
-    with st.expander("➕ Add"):
-        if table in ["providers","receivers"]:
-            name=st.text_input("Name")
-            city=st.text_input("City")
-            if st.button("Add"):
-                insert(table,(name,city))
-
-        elif table=="food":
-            t=st.text_input("Type")
-            c=st.text_input("City")
-            q=st.number_input("Quantity")
-            if st.button("Add"):
-                insert(table,(t,c,q))
-
-        elif table=="claims":
-            c=st.text_input("City")
-            s=st.selectbox("Status",["Pending","Completed"])
-            if st.button("Add"):
-                insert(table,(c,s))
-
-    # DELETE
-    with st.expander("🗑️ Delete"):
-        id=st.number_input("ID",step=1)
-        if st.button("Delete"):
-            delete(table,id)
+        st.plotly_chart(px.box(df, y="quantity",
+                                      title="📦 Quantity Spread"))
 
 # ---------------- DATA ----------------
-elif menu=="Data":
+elif menu == "Data":
     st.title("📂 Data")
 
     for table in ["providers","receivers","food","claims"]:
@@ -167,7 +161,7 @@ elif menu=="Data":
         st.dataframe(df)
 
 # ---------------- QUERIES ----------------
-elif menu=="Queries":
+elif menu == "Queries":
     st.title("📊 SQL Queries")
 
     queries = {
@@ -178,28 +172,22 @@ elif menu=="Queries":
 
     q = st.selectbox("Select Question", list(queries.keys()))
 
-    st.markdown("### 🧠 Query (Formula)")
+    st.markdown("### 🧠 Query")
     st.code(queries[q])
 
-    if st.button("Run Query"):
+    if st.button("Run"):
         result = pd.read_sql(queries[q], conn)
-        st.success("Result")
         st.dataframe(result)
 
 # ---------------- ABOUT ----------------
-elif menu=="About":
+elif menu == "About":
     st.title("ℹ️ About")
 
     st.write("""
-    **Food Waste Management System**
+    Developed by **Ashish**
 
-    Developed by: **Ashish**
-
-    This project helps reduce food wastage using:
-    - Data Analytics
-    - CRUD Operations
+    Food Waste Management System with:
+    - Analytics
+    - CRUD
     - SQL Queries
-    - Visualization
-
-    Built using Python, Streamlit, SQLite.
     """)
