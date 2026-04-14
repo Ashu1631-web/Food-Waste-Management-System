@@ -60,7 +60,7 @@ if not st.session_state.login:
     <style>
     .block-container { padding-top: 0 !important; padding-bottom: 0 !important; max-width: 100% !important; }
     [data-testid="stAppViewContainer"] {
-        background-image: url("https://images.unsplash.com/photo-1695654390723-479197a8c4a3?q=80&w=834&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D");
+        background-image: url("https://wallpaperaccess.com/full/767252.jpg");
         background-size: cover;
         background-position: center;
         background-attachment: fixed;
