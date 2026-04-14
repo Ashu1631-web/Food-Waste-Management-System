@@ -53,6 +53,13 @@ data_map = {
     "Claims": claims_df
 }
 
+# ---------------- HELPER FUNCTION ----------------
+def get_col(df, names):
+    for col in df.columns:
+        if col.lower() in [n.lower() for n in names]:
+            return col
+    return None
+  
 # ==================== LOGIN ====================
 if "login" not in st.session_state:
     st.session_state.login       = False
