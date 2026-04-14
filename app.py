@@ -26,24 +26,37 @@ def apply_theme(fig, title=""):
     return fig
 
 # ---------------- LOAD DATA ----------------
-@st.cache_data
-def load_clean(file):
-    df = pd.read_csv(file)
-    df.columns = df.columns.str.strip().str.title()
-    return df
-
-providers_df = load_clean("providers_data.csv")
-receivers_df  = load_clean("receivers_data.csv")
-food_df       = load_clean("food_listings_data.csv")
-claims_df     = load_clean("claims_data.csv")
-
-data_map = {
-    "Providers":     providers_df,
-    "Receivers":     receivers_df,
-    "Food Listings": food_df,
-    "Claims":        claims_df,
+file_map = {
+    "Providers": "providers_data.csv",
+    "Receivers": "receivers_data.csv",
+    "Food Listings": "food_listings_data.csv",
+    "Claims": "claims_data.csv"
 }
 
+# Load function (NO CACHE → live update)
+def load_clean(file):
+    if os.path.exists(file):
+        df = pd.read_csv(file)
+        df.columns = df.columns.str.strip().str.title()
+        return df
+    else:
+        return pd.DataFrame()
+
+# Load all datasets
+providers_df = load_clean(file_map["Providers"])
+receivers_df = load_clean(file_map["Receivers"])
+food_df = load_clean(file_map["Food Listings"])
+claims_df = load_clean(file_map["Claims"])
+
+# Store in dictionary (used in app)
+data_map = {
+    "Providers": providers_df,
+    "Receivers": receivers_df,
+    "Food Listings": food_df,
+    "Claims": claims_df,
+}
+
+# Utility function (column detection)
 def get_col(df, names):
     for col in df.columns:
         if col.lower() in [n.lower() for n in names]:
@@ -405,15 +418,25 @@ elif menu == "Data":
         new_data[col] = st.text_input(col)
 
     if st.button("Add Record"):
-        data_map[table] = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-        st.success("✅ Record Added")
+    new_df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+
+    # SAVE to CSV
+    new_df.to_csv(file_map[table], index=False)
+
+    st.success("✅ Record Added & Saved")
+    st.rerun()
 
     st.markdown("## ❌ Delete Record")
     id_col    = df.columns[0]
     delete_id = st.selectbox("Select ID to Delete", df[id_col])
-    if st.button("Delete Record"):
-        data_map[table] = df[df[id_col] != delete_id]
-        st.success("🗑️ Record Deleted")
+if st.button("Delete Record"):
+    new_df = df[df[id_col] != delete_id]
+
+    # SAVE to CSV
+    new_df.to_csv(file_map[table], index=False)
+
+    st.success("🗑️ Record Deleted & Saved")
+    st.rerun()
 
 # ==================== QUERIES ====================
 elif menu == "Queries":
