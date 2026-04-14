@@ -419,9 +419,10 @@ elif menu == "Data":
     if st.button("Add Record"):
         new_df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
         new_df.to_csv(file_map[table], index=False)
-        st.success("✅ Record Added & Saved")
-        st.rerun()
-
+        st.success("✅ Record Added Successfully!")
+        st.write("### 🔄 Updated Data")
+        st.dataframe(new_df, use_container_width=True)
+        
     # DELETE
     st.subheader("Delete Record")
     id_col = df.columns[0]
@@ -430,8 +431,10 @@ elif menu == "Data":
     if st.button("Delete Record"):
         new_df = df[df[id_col] != delete_id]
         new_df.to_csv(file_map[table], index=False)
-        st.success("🗑️ Record Deleted & Saved")
-        st.rerun()
+        
+        st.success("🗑️ Record Deleted Successfully!")
+        st.write("### 🔄 Updated Data")
+        st.dataframe(new_df, use_container_width=True)
 
 # ==================== QUERIES ====================
 elif menu == "Queries":
