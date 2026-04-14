@@ -393,39 +393,37 @@ elif menu == "CRUD":
         except Exception as e:
             st.warning(f"⚠️ Some charts could not be rendered: {e}")
 
-# ==================== DATA ====================
+# ---------------- DATA  ----------------
 elif menu == "Data":
-    st.title("📂 Data Management")
+    st.title("Data Management")
 
     table = st.selectbox("Select Dataset", list(data_map.keys()))
-    df    = data_map[table]
+    df = data_map[table]
+
     st.dataframe(df, use_container_width=True)
 
-    st.markdown("## ➕ Add Record")
+    # ADD
+    st.subheader("Add Record")
     new_data = {}
     for col in df.columns:
         new_data[col] = st.text_input(col)
 
     if st.button("Add Record"):
-    new_df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+        new_df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+        new_df.to_csv(file_map[table], index=False)
+        st.success("✅ Record Added & Saved")
+        st.rerun()
 
-    # SAVE to CSV
-    new_df.to_csv(file_map[table], index=False)
+    # DELETE
+    st.subheader("Delete Record")
+    id_col = df.columns[0]
+    delete_id = st.selectbox("Select ID", df[id_col])
 
-    st.success("✅ Record Added & Saved")
-    st.rerun()
-
-    st.markdown("## ❌ Delete Record")
-    id_col    = df.columns[0]
-    delete_id = st.selectbox("Select ID to Delete", df[id_col])
-if st.button("Delete Record"):
-    new_df = df[df[id_col] != delete_id]
-
-    # SAVE to CSV
-    new_df.to_csv(file_map[table], index=False)
-
-    st.success("🗑️ Record Deleted & Saved")
-    st.rerun()
+    if st.button("Delete Record"):
+        new_df = df[df[id_col] != delete_id]
+        new_df.to_csv(file_map[table], index=False)
+        st.success("🗑️ Record Deleted & Saved")
+        st.rerun()
 
 # ==================== QUERIES ====================
 elif menu == "Queries":
