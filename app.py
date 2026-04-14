@@ -157,164 +157,239 @@ elif menu == "CRUD":
     st.title("🛠️ CRUD + Analytics")
 
     table = st.selectbox("Select Table", list(data_map.keys()))
-    df = data_map[table].copy()
+    df_orig = data_map[table].copy()
 
-    city_col   = get_col(df, ["city","location"])
-    type_col   = get_col(df, ["type","food_type","meal_type","provider_type"])
-    status_col = get_col(df, ["status","claim_status"])
-    qty_col    = get_col(df, ["quantity"])
+    # ── Smart column detection ──
+    city_col   = get_col(df_orig, ["city", "location"])
+    type_col   = get_col(df_orig, ["type", "food_type", "meal_type", "provider_type", "receiver_type"])
+    status_col = get_col(df_orig, ["status", "claim_status"])
+    qty_col    = get_col(df_orig, ["quantity", "quantity_claimed"])
 
-    # --- 2 context-aware filters ---
-    f1, f2 = st.columns(2)
+    # All categorical cols (for fallback)
+    all_cat = [c for c in df_orig.columns if df_orig[c].dtype == object]
+    # All numeric cols (for fallback)
+    all_num = [c for c in df_orig.columns if pd.api.types.is_numeric_dtype(df_orig[c])]
 
-    filter_labels = {
-        "Providers":     ("🏪 Filter by Provider Type", "📍 Filter by City"),
-        "Receivers":     ("👥 Filter by Receiver Type",  "📍 Filter by City"),
-        "Food Listings": ("🥘 Filter by Food Type",      "📍 Filter by City"),
-        "Claims":        ("🔖 Filter by Status",         "📍 Filter by City"),
+    # ── Resolve filter columns per table ──
+    FILTER_CFG = {
+        "Providers":     (type_col,   "🏪 Provider Type",  city_col,   "📍 City"),
+        "Receivers":     (type_col,   "👥 Receiver Type",  city_col,   "📍 City"),
+        "Food Listings": (type_col,   "🥘 Food Type",      city_col,   "📍 City"),
+        "Claims":        (status_col, "🔖 Claim Status",
+                          city_col or get_col(df_orig, ["provider_id", "receiver_id", "food_id"]),
+                          "📍 City" if city_col else "🔗 Provider ID"),
     }
-    lbl1, lbl2 = filter_labels.get(table, ("Filter 1","Filter 2"))
+    col1, lbl1, col2, lbl2 = FILTER_CFG.get(table, (all_cat[0] if all_cat else None, "Filter 1",
+                                                     all_cat[1] if len(all_cat) > 1 else None, "Filter 2"))
+
+    f1, f2 = st.columns(2)
+    df = df_orig.copy()
 
     with f1:
-        col1 = status_col if table == "Claims" else type_col
-        if col1:
-            opts = ["All"] + sorted(df[col1].dropna().unique().tolist())
+        if col1 and col1 in df.columns:
+            opts = ["All"] + sorted(df[col1].dropna().astype(str).unique().tolist())
             sel1 = st.selectbox(lbl1, opts)
             if sel1 != "All":
-                df = df[df[col1] == sel1]
+                df = df[df[col1].astype(str) == sel1]
         else:
-            st.info("No type/status column found.")
+            st.info("No primary filter available.")
 
     with f2:
-        if city_col:
-            opts2 = ["All"] + sorted(df[city_col].dropna().unique().tolist())
+        if col2 and col2 in df.columns:
+            opts2 = ["All"] + sorted(df[col2].dropna().astype(str).unique().tolist())
             sel2  = st.selectbox(lbl2, opts2)
             if sel2 != "All":
-                df = df[df[city_col] == sel2]
+                df = df[df[col2].astype(str) == sel2]
         else:
-            st.info("No city column found.")
+            st.info("No secondary filter available.")
 
     if df.empty:
         st.warning("⚠️ No records match the selected filters.")
     else:
         st.dataframe(df, use_container_width=True)
 
-    # ---- 10 GRAPHS ----
-    st.markdown("## 📊 Visual Insights")
+    # ==================== 10 GRAPHS ====================
+    st.markdown(f"## 📊 Visual Insights — {table}")
 
     if df.empty:
         st.info("Adjust filters to see charts.")
     else:
-        # re-detect on filtered df
-        city_col   = get_col(df, ["city","location"])
-        type_col   = get_col(df, ["type","food_type","meal_type","provider_type"])
-        status_col = get_col(df, ["status","claim_status"])
-        qty_col    = get_col(df, ["quantity"])
-        drawn = 0
+        # Re-detect on filtered df
+        city_c   = get_col(df, ["city", "location"])
+        type_c   = get_col(df, ["type", "food_type", "meal_type", "provider_type", "receiver_type"])
+        status_c = get_col(df, ["status", "claim_status"])
+        qty_c    = get_col(df, ["quantity", "quantity_claimed"])
+        grp_c    = status_c if table == "Claims" else type_c
+        grp_lbl  = "Status" if table == "Claims" else "Type"
+
+        # Fallbacks
+        cat_fallbacks = [c for c in df.columns if df[c].dtype == object
+                         and c not in [city_c, type_c, status_c] and df[c].nunique() <= 40]
+        num_fallbacks = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])
+                         and c != qty_c]
+        num_c = qty_c or (num_fallbacks[0] if num_fallbacks else None)
+        num_lbl = "Quantity" if qty_c else (num_fallbacks[0] if num_fallbacks else "Value")
+        cat_extra = cat_fallbacks[0] if cat_fallbacks else (grp_c or city_c)
+
+        # Helper: safe bar
+        def cat_bar(col, title, top=20):
+            t = df[col].value_counts().nlargest(top).reset_index()
+            t.columns = [col, "Count"]
+            return apply_theme(px.bar(t, x=col, y="Count", color=col,
+                               color_discrete_sequence=COLOR_SEQ,
+                               labels={col: col, "Count": "Records"}), title)
 
         try:
-            # 1 – City Bar (top 20)
-            if city_col:
-                t = df[city_col].value_counts().nlargest(20).reset_index()
-                t.columns = ["City","Count"]
-                fig = px.bar(t, x="City", y="Count", color="City",
-                             color_discrete_sequence=COLOR_SEQ,
-                             labels={"City":"City","Count":"Records"})
-                st.plotly_chart(apply_theme(fig, f"📍 Top Cities — {table}"), use_container_width=True)
-                drawn += 1
+            # ── Graph 1: Top Cities / primary-cat bar ──
+            g1_col = city_c or grp_c or cat_extra
+            g1_lbl = "City" if g1_col == city_c else (grp_lbl if g1_col == grp_c else g1_col)
+            st.plotly_chart(cat_bar(g1_col, f"📍 Top {g1_lbl}s — {table}"), use_container_width=True)
 
-            # 2 – City Pie (top 10 to avoid 0.1% mess)
-            if city_col:
-                t = df[city_col].value_counts().nlargest(10).reset_index()
-                t.columns = ["City","Count"]
-                fig = px.pie(t, names="City", values="Count",
-                             color_discrete_sequence=COLOR_SEQ, hole=0.38)
-                fig.update_traces(textposition="inside", textinfo="percent+label", textfont_size=11)
-                st.plotly_chart(apply_theme(fig, f"🗺️ City Share (Top 10) — {table}"), use_container_width=True)
-                drawn += 1
+            # ── Graph 2: City / primary-cat pie ──
+            t2 = df[g1_col].value_counts().nlargest(10).reset_index()
+            t2.columns = [g1_col, "Count"]
+            fig2 = px.pie(t2, names=g1_col, values="Count",
+                          color_discrete_sequence=COLOR_SEQ, hole=0.38)
+            fig2.update_traces(textposition="inside", textinfo="percent+label", textfont_size=11)
+            st.plotly_chart(apply_theme(fig2, f"🗺️ {g1_lbl} Share (Top 10) — {table}"), use_container_width=True)
 
-            # 3 – Type / Status Bar
-            grp_col = status_col if table == "Claims" else type_col
-            if grp_col:
-                t = df[grp_col].value_counts().reset_index()
-                t.columns = ["Group","Count"]
-                label = "Status" if table == "Claims" else "Type"
-                fig = px.bar(t, x="Group", y="Count", color="Group",
-                             color_discrete_sequence=COLOR_SEQ,
-                             labels={"Group": label,"Count":"Count"})
-                st.plotly_chart(apply_theme(fig, f"🏷️ Distribution by {label} — {table}"), use_container_width=True)
-                drawn += 1
+            # ── Graph 3: grp_col bar (type/status) ──
+            g3_col = grp_c or (city_c if city_c != g1_col else cat_extra)
+            g3_lbl = grp_lbl if g3_col == grp_c else (g3_col or "Category")
+            if g3_col and g3_col != g1_col:
+                st.plotly_chart(cat_bar(g3_col, f"🏷️ Distribution by {g3_lbl} — {table}"), use_container_width=True)
+            else:
+                # Treemap fallback
+                t3 = df[g1_col].value_counts().reset_index(); t3.columns = [g1_col, "Count"]
+                fig3 = px.treemap(t3, path=[g1_col], values="Count", color_discrete_sequence=COLOR_SEQ)
+                st.plotly_chart(apply_theme(fig3, f"🏷️ {g1_lbl} Treemap — {table}"), use_container_width=True)
 
-            # 4 – Type / Status Donut
-            if grp_col:
-                t = df[grp_col].value_counts().reset_index()
-                t.columns = ["Group","Count"]
-                fig = px.pie(t, names="Group", values="Count",
-                             color_discrete_sequence=COLOR_SEQ, hole=0.45)
-                fig.update_traces(textposition="inside", textinfo="percent+label", textfont_size=11)
-                st.plotly_chart(apply_theme(fig, f"🥧 {label} Share — {table}"), use_container_width=True)
-                drawn += 1
+            # ── Graph 4: grp_col donut ──
+            g4_col = g3_col or g1_col
+            g4_lbl = g3_lbl or g1_lbl
+            t4 = df[g4_col].value_counts().reset_index(); t4.columns = [g4_col, "Count"]
+            fig4 = px.pie(t4, names=g4_col, values="Count",
+                          color_discrete_sequence=COLOR_SEQ, hole=0.45)
+            fig4.update_traces(textposition="inside", textinfo="percent+label", textfont_size=11)
+            st.plotly_chart(apply_theme(fig4, f"🥧 {g4_lbl} Share — {table}"), use_container_width=True)
 
-            # 5 – Status Funnel (only for Claims)
-            if status_col:
-                t = df[status_col].value_counts().reset_index()
-                t.columns = ["Status","Count"]
-                fig = px.funnel(t, x="Count", y="Status",
-                                color="Status", color_discrete_sequence=COLOR_SEQ)
-                st.plotly_chart(apply_theme(fig, f"🔻 Status Funnel — {table}"), use_container_width=True)
-                drawn += 1
+            # ── Graph 5: Status Funnel OR stacked bar (city × type) ──
+            if status_c:
+                t5 = df[status_c].value_counts().reset_index(); t5.columns = ["Status", "Count"]
+                fig5 = px.funnel(t5, x="Count", y="Status",
+                                 color="Status", color_discrete_sequence=COLOR_SEQ)
+                st.plotly_chart(apply_theme(fig5, f"🔻 Status Funnel — {table}"), use_container_width=True)
+            elif city_c and type_c and city_c != type_c:
+                cross5 = df.groupby([city_c, type_c]).size().unstack(fill_value=0)
+                fig5 = px.bar(cross5.reset_index(), x=city_c, y=cross5.columns.tolist(),
+                              color_discrete_sequence=COLOR_SEQ, barmode="stack",
+                              labels={city_c: "City"})
+                st.plotly_chart(apply_theme(fig5, f"🔻 {grp_lbl} by City (Stacked) — {table}"), use_container_width=True)
+            else:
+                t5 = df[g1_col].value_counts().reset_index(); t5.columns = [g1_col, "Count"]
+                fig5 = px.funnel(t5.head(8), x="Count", y=g1_col,
+                                 color=g1_col, color_discrete_sequence=COLOR_SEQ)
+                st.plotly_chart(apply_theme(fig5, f"🔻 {g1_lbl} Funnel — {table}"), use_container_width=True)
 
-            # 6 – Quantity Box
-            if qty_col:
-                fig = px.box(df, y=qty_col, color_discrete_sequence=COLOR_SEQ,
-                             labels={qty_col:"Quantity (units)"})
-                fig.update_traces(marker_color="#7F77DD", line_color="#a09cff")
-                st.plotly_chart(apply_theme(fig, f"📦 Quantity Spread — {table}"), use_container_width=True)
-                drawn += 1
+            # ── Graph 6: Qty / num box ──
+            if num_c:
+                fig6 = px.box(df, y=num_c, color_discrete_sequence=COLOR_SEQ,
+                              labels={num_c: num_lbl})
+                fig6.update_traces(marker_color="#7F77DD", line_color="#a09cff")
+                st.plotly_chart(apply_theme(fig6, f"📦 {num_lbl} Spread — {table}"), use_container_width=True)
+            else:
+                # Records KPI card
+                fig6 = go.Figure(go.Indicator(
+                    mode="number", value=len(df),
+                    title={"text": f"Total {table} Records", "font": {"color": "#a09cff"}},
+                    number={"font": {"color": "#c9c3ff", "size": 72}},
+                ))
+                fig6.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+                                   margin=dict(t=60, b=40))
+                st.plotly_chart(apply_theme(fig6, f"📦 Record Count — {table}"), use_container_width=True)
 
-            # 7 – Quantity Histogram
-            if qty_col:
-                fig = px.histogram(df, x=qty_col, nbins=25,
-                                   color_discrete_sequence=["#1D9E75"],
-                                   labels={qty_col:"Quantity","count":"Frequency"})
-                st.plotly_chart(apply_theme(fig, f"📊 Quantity Frequency — {table}"), use_container_width=True)
-                drawn += 1
+            # ── Graph 7: Qty / num histogram OR cross-tab bar ──
+            if num_c:
+                fig7 = px.histogram(df, x=num_c, nbins=25,
+                                    color_discrete_sequence=["#1D9E75"],
+                                    labels={num_c: num_lbl, "count": "Frequency"})
+                st.plotly_chart(apply_theme(fig7, f"📊 {num_lbl} Distribution — {table}"), use_container_width=True)
+            elif grp_c and city_c:
+                cross7 = pd.crosstab(df[grp_c].fillna("?"), df[city_c].fillna("?"))
+                fig7 = px.imshow(cross7, color_continuous_scale="Purples",
+                                 labels=dict(color="Count"),
+                                 aspect="auto")
+                st.plotly_chart(apply_theme(fig7, f"📊 {grp_lbl} × City Heatmap — {table}"), use_container_width=True)
+            else:
+                fig7 = px.bar(df[g1_col].value_counts().reset_index().rename(
+                              columns={g1_col: g1_lbl, "count": "Count"}),
+                              x=g1_lbl, y="Count", color_discrete_sequence=["#1D9E75"])
+                st.plotly_chart(apply_theme(fig7, f"📊 {g1_lbl} Count Bars — {table}"), use_container_width=True)
 
-            # 8 – Total Qty by City
-            if qty_col and city_col:
-                grp = df.groupby(city_col)[qty_col].sum().nlargest(15).reset_index()
-                grp.columns = ["City","Total Qty"]
-                fig = px.bar(grp, x="City", y="Total Qty", color="City",
-                             color_discrete_sequence=COLOR_SEQ,
-                             labels={"City":"City","Total Qty":"Total Quantity"})
-                st.plotly_chart(apply_theme(fig, f"🏙️ Total Quantity by City — {table}"), use_container_width=True)
-                drawn += 1
+            # ── Graph 8: Total Qty by City OR records by city ──
+            if city_c:
+                if qty_c:
+                    g8 = df.groupby(city_c)[qty_c].sum().nlargest(15).reset_index()
+                    g8.columns = ["City", "Total Qty"]
+                    fig8 = px.bar(g8, x="City", y="Total Qty", color="City",
+                                  color_discrete_sequence=COLOR_SEQ,
+                                  labels={"City": "City", "Total Qty": "Total Quantity"})
+                    st.plotly_chart(apply_theme(fig8, f"🏙️ Total Quantity by City — {table}"), use_container_width=True)
+                else:
+                    g8 = df.groupby(city_c).size().nlargest(15).reset_index()
+                    g8.columns = ["City", "Count"]
+                    fig8 = px.bar(g8, x="City", y="Count", color="City",
+                                  color_discrete_sequence=COLOR_SEQ)
+                    st.plotly_chart(apply_theme(fig8, f"🏙️ Records by City — {table}"), use_container_width=True)
+            else:
+                # Treemap of grp_col
+                t8 = df[grp_c or g1_col].value_counts().reset_index()
+                t8.columns = ["Cat", "Count"]
+                fig8 = px.treemap(t8, path=["Cat"], values="Count", color_discrete_sequence=COLOR_SEQ)
+                st.plotly_chart(apply_theme(fig8, f"🏙️ {grp_lbl} Treemap — {table}"), use_container_width=True)
 
-            # 9 – Avg Qty by Type (horizontal)
-            if qty_col and type_col:
-                grp = df.groupby(type_col)[qty_col].mean().reset_index()
-                grp.columns = ["Type","Avg Qty"]
-                grp["Avg Qty"] = grp["Avg Qty"].round(1)
-                fig = px.bar(grp, x="Avg Qty", y="Type", orientation="h",
-                             color="Type", color_discrete_sequence=COLOR_SEQ,
-                             labels={"Type":"Type","Avg Qty":"Average Quantity"})
-                st.plotly_chart(apply_theme(fig, f"📈 Avg Quantity by Type — {table}"), use_container_width=True)
-                drawn += 1
+            # ── Graph 9: Avg Qty by Type OR grouped bar ──
+            if num_c and grp_c:
+                g9 = df.groupby(grp_c)[num_c].mean().reset_index()
+                g9.columns = [grp_lbl, f"Avg {num_lbl}"]
+                g9[f"Avg {num_lbl}"] = g9[f"Avg {num_lbl}"].round(1)
+                fig9 = px.bar(g9, x=f"Avg {num_lbl}", y=grp_lbl, orientation="h",
+                              color=grp_lbl, color_discrete_sequence=COLOR_SEQ,
+                              labels={grp_lbl: grp_lbl, f"Avg {num_lbl}": f"Avg {num_lbl}"})
+                st.plotly_chart(apply_theme(fig9, f"📈 Avg {num_lbl} by {grp_lbl} — {table}"), use_container_width=True)
+            elif grp_c and city_c:
+                g9 = df.groupby([grp_c, city_c]).size().unstack(fill_value=0)
+                fig9 = px.bar(g9.reset_index(), x=grp_c, y=g9.columns.tolist(),
+                              barmode="group", color_discrete_sequence=COLOR_SEQ)
+                st.plotly_chart(apply_theme(fig9, f"📈 {grp_lbl} Count by City — {table}"), use_container_width=True)
+            else:
+                top9_col = cat_extra or g1_col
+                t9 = df[top9_col].value_counts().nlargest(15).reset_index()
+                t9.columns = [top9_col, "Count"]
+                fig9 = px.bar(t9, x=top9_col, y="Count", color=top9_col,
+                              orientation="v", color_discrete_sequence=COLOR_SEQ)
+                st.plotly_chart(apply_theme(fig9, f"📈 Top {top9_col} Values — {table}"), use_container_width=True)
 
-            # 10 – Qty Trend line
-            if qty_col:
-                fig = px.line(df.reset_index(), x="index", y=qty_col,
-                              color_discrete_sequence=["#7F77DD"],
-                              labels={"index":"Record #", qty_col:"Quantity"})
-                fig.update_traces(line_width=1.8)
-                st.plotly_chart(apply_theme(fig, f"📉 Quantity Trend — {table}"), use_container_width=True)
-                drawn += 1
+            # ── Graph 10: Qty trend line OR cumulative area ──
+            df_r = df.reset_index(drop=True).reset_index()
+            if num_c:
+                fig10 = px.line(df_r, x="index", y=num_c,
+                                color_discrete_sequence=["#7F77DD"],
+                                labels={"index": "Record #", num_c: num_lbl})
+                fig10.update_traces(line_width=1.8)
+                st.plotly_chart(apply_theme(fig10, f"📉 {num_lbl} Trend — {table}"), use_container_width=True)
+            else:
+                df_r["Cumulative"] = range(1, len(df_r) + 1)
+                fig10 = px.area(df_r, x="index", y="Cumulative",
+                                color_discrete_sequence=["#7F77DD"],
+                                labels={"index": "Record #", "Cumulative": "Cumulative Count"})
+                fig10.update_traces(line_width=1.8)
+                st.plotly_chart(apply_theme(fig10, f"📉 Cumulative Records — {table}"), use_container_width=True)
 
-            if drawn == 0:
-                st.info("No graphable columns found for this table/filter combination.")
+            st.caption(f"✅ 10 charts rendered for **{table}**")
 
         except Exception as e:
-            st.warning(f"Some charts could not be rendered: {e}")
+            st.warning(f"⚠️ Some charts could not be rendered: {e}")
 
 # ==================== DATA ====================
 elif menu == "Data":
