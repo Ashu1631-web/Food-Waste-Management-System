@@ -33,35 +33,24 @@ file_map = {
     "Claims": "claims_data.csv"
 }
 
-# Load function (NO CACHE → live update)
 def load_clean(file):
     if os.path.exists(file):
         df = pd.read_csv(file)
         df.columns = df.columns.str.strip().str.title()
         return df
-    else:
-        return pd.DataFrame()
+    return pd.DataFrame()
 
-# Load all datasets
 providers_df = load_clean(file_map["Providers"])
 receivers_df = load_clean(file_map["Receivers"])
 food_df = load_clean(file_map["Food Listings"])
 claims_df = load_clean(file_map["Claims"])
 
-# Store in dictionary (used in app)
 data_map = {
     "Providers": providers_df,
     "Receivers": receivers_df,
     "Food Listings": food_df,
-    "Claims": claims_df,
+    "Claims": claims_df
 }
-
-# Utility function (column detection)
-def get_col(df, names):
-    for col in df.columns:
-        if col.lower() in [n.lower() for n in names]:
-            return col
-    return None
 
 # ==================== LOGIN ====================
 if "login" not in st.session_state:
@@ -160,10 +149,10 @@ Our platform acts as a digital bridge to reduce food waste and feed those in nee
 Streamlit · Pandas · Plotly
 """)
     c1,c2,c3,c4 = st.columns(4)
-    c1.metric("Providers",     len(providers_df))
-    c2.metric("Receivers",     len(receivers_df))
-    c3.metric("Food Listings", len(food_df))
-    c4.metric("Claims",        len(claims_df))
+    c1.metric("Providers", len(providers_df))
+    c2.metric("Receivers", len(receivers_df))
+    c3.metric("Food", len(food_df))
+    c4.metric("Claims", len(claims_df))
 
 # ==================== CRUD / EDA ====================
 elif menu == "CRUD":
